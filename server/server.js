@@ -309,7 +309,7 @@ io.on(
 
                     socket.emit(
                         "error_message",
-                        "必须正好10个人才能开始"
+                        "必须正好10个人才能开始游戏"
                     );
 
                     return;
@@ -485,7 +485,13 @@ io.on(
 
         socket.on(
             "next_round",
-            () => {
+            callback => {
+
+                console.log(
+                    "收到下一局请求:",
+                    socket.id
+                );
+
 
                 const room =
                     getRoom(
@@ -493,13 +499,35 @@ io.on(
                     );
 
 
-                if (!room) return;
+                if (!room) {
+
+                    if (callback) {
+
+                        callback({
+                            success: false,
+                            message: "房间不存在"
+                        });
+
+                    }
+
+                    return;
+                }
 
 
                 if (
                     room.hostId !==
                     socket.id
                 ) {
+
+                    if (callback) {
+
+                        callback({
+                            success: false,
+                            message:
+                                "只有房主可以开始下一局"
+                        });
+
+                    }
 
                     return;
                 }
@@ -509,6 +537,16 @@ io.on(
                     room.players.length !==
                     10
                 ) {
+
+                    if (callback) {
+
+                        callback({
+                            success: false,
+                            message:
+                                `当前只有 ${room.players.length} 人，必须正好10个人才能开始下一局`
+                        });
+
+                    }
 
                     return;
                 }
@@ -537,7 +575,10 @@ io.on(
                     "PLAYING";
 
 
-                // 公开新一局的基本信息
+                // =========================
+                // 通知所有玩家：新一局开始
+                // =========================
+
                 io.to(room.code).emit(
                     "game_started",
                     getPublicGame(
@@ -547,7 +588,10 @@ io.on(
                 );
 
 
-                // 重新发送每个人自己的秘密身份
+                // =========================
+                // 单独发送每个人的秘密身份
+                // =========================
+
                 room.players.forEach(
                     player => {
 
@@ -572,6 +616,20 @@ io.on(
                 console.log(
                     `房间 ${room.code} 第 ${room.round} 局开始`
                 );
+
+
+                // =========================
+                // 告诉房主：成功
+                // =========================
+
+                if (callback) {
+
+                    callback({
+                        success: true,
+                        round: room.round
+                    });
+
+                }
 
             }
         );
