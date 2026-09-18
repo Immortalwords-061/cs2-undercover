@@ -1,0 +1,483 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+
+    background:
+        linear-gradient(
+            135deg,
+            #0f172a,
+            #111827
+        );
+
+    color: white;
+
+    font-family:
+        Arial,
+        "Microsoft YaHei",
+        sans-serif;
+}
+
+.container {
+    width: min(1000px, 94%);
+
+    margin: 0 auto;
+
+    padding:
+        35px 0 60px;
+}
+
+h1 {
+    text-align: center;
+
+    font-size: 42px;
+
+    margin:
+        0 0 35px;
+}
+
+h2 {
+    margin-top: 0;
+}
+
+.panel {
+    background: #1e293b;
+
+    padding: 30px;
+
+    border-radius: 18px;
+
+    box-shadow:
+        0 15px 40px
+        rgba(0, 0, 0, 0.35);
+
+    margin-bottom: 20px;
+}
+
+
+/* =========================
+   输入框
+========================= */
+
+input {
+    width: 100%;
+
+    padding: 14px;
+
+    margin-bottom: 15px;
+
+    border:
+        1px solid #475569;
+
+    border-radius: 10px;
+
+    background: #0f172a;
+
+    color: white;
+
+    font-size: 16px;
+
+    outline: none;
+}
+
+input:focus {
+    border-color: #60a5fa;
+}
+
+button {
+    border: none;
+
+    border-radius: 10px;
+
+    padding:
+        13px 25px;
+
+    background: #f59e0b;
+
+    color: white;
+
+    font-size: 16px;
+
+    cursor: pointer;
+
+    transition:
+        transform 0.15s,
+        filter 0.15s;
+}
+
+button:hover {
+    filter: brightness(1.1);
+
+    transform:
+        translateY(-2px);
+}
+
+.secondary {
+    background: #475569;
+}
+
+.room-buttons {
+    display: flex;
+
+    gap: 12px;
+
+    flex-wrap: wrap;
+}
+
+
+/* =========================
+   房间大厅
+========================= */
+
+.room-header {
+    display: flex;
+
+    justify-content:
+        space-between;
+
+    align-items: center;
+
+    gap: 20px;
+}
+
+.room-header p {
+    color: #94a3b8;
+}
+
+.room-header strong {
+    color: #fbbf24;
+
+    font-size: 24px;
+
+    letter-spacing: 3px;
+}
+
+.player-count {
+    font-size: 22px;
+
+    font-weight: bold;
+}
+
+.player-count span {
+    color: #fbbf24;
+}
+
+
+/* =========================
+   玩家列表
+========================= */
+
+#playerList {
+    display: grid;
+
+    grid-template-columns:
+        repeat(2, 1fr);
+
+    gap: 12px;
+
+    margin:
+        25px 0;
+}
+
+.lobby-player {
+    display: flex;
+
+    justify-content:
+        space-between;
+
+    align-items: center;
+
+    min-height: 55px;
+
+    padding:
+        12px 16px;
+
+    background: #334155;
+
+    border-radius: 10px;
+
+    font-size: 16px;
+}
+
+.lobby-player span:last-child {
+    color: #fbbf24;
+
+    font-size: 13px;
+}
+
+
+/* =========================
+   游戏玩家卡片
+========================= */
+
+#players {
+    display: grid;
+
+    grid-template-columns:
+        repeat(5, 1fr);
+
+    gap: 12px;
+
+    margin-top: 25px;
+}
+
+.player-card {
+    min-height: 170px;
+
+    border-radius: 12px;
+
+    background: #334155;
+
+    overflow: hidden;
+
+    cursor: default;
+
+    transition:
+        transform 0.15s,
+        filter 0.15s;
+}
+
+.player-card:hover {
+    filter: brightness(1.1);
+}
+
+.player-card[data-player-id] {
+    position: relative;
+}
+
+.player-card.revealed {
+    background: #1e293b;
+}
+
+.card-hidden {
+    min-height: 170px;
+
+    padding: 20px 10px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    align-items: center;
+
+    text-align: center;
+}
+
+.player-name {
+    font-size: 18px;
+
+    font-weight: bold;
+
+    margin-bottom: 12px;
+
+    word-break: break-word;
+}
+
+.lock-icon {
+    font-size: 28px;
+
+    margin-bottom: 8px;
+}
+
+.click-text {
+    color: #94a3b8;
+
+    font-size: 12px;
+}
+
+
+/* =========================
+   身份显示
+========================= */
+
+.card-visible {
+    min-height: 170px;
+
+    padding: 15px;
+
+    text-align: center;
+}
+
+.role {
+    display: inline-block;
+
+    padding:
+        6px 12px;
+
+    border-radius: 8px;
+
+    font-weight: bold;
+
+    margin-bottom: 8px;
+}
+
+.role.good {
+    background: #065f46;
+
+    color: #6ee7b7;
+}
+
+.role.spy {
+    background: #7f1d1d;
+
+    color: #fca5a5;
+}
+
+.team-text {
+    color: #cbd5e1;
+
+    font-size: 13px;
+
+    margin-bottom: 10px;
+}
+
+.task-title {
+    color: #fbbf24;
+
+    font-size: 12px;
+
+    margin-bottom: 4px;
+}
+
+.task-text {
+    font-size: 13px;
+
+    line-height: 1.4;
+
+    color: #f8fafc;
+}
+
+.hide-text {
+    margin-top: 10px;
+
+    font-size: 11px;
+
+    color: #64748b;
+}
+
+
+/* =========================
+   结束 / 揭晓
+========================= */
+
+.final-title {
+    grid-column:
+        1 / -1;
+
+    text-align: center;
+
+    font-size: 24px;
+
+    font-weight: bold;
+
+    margin-bottom: 10px;
+
+    color: #fbbf24;
+}
+
+.final-player {
+    display: flex;
+
+    justify-content:
+        space-between;
+
+    align-items: center;
+
+    gap: 10px;
+
+    padding:
+        14px 16px;
+
+    margin-bottom: 8px;
+
+    background: #334155;
+
+    border-radius: 10px;
+}
+
+.final-player span {
+    color: #cbd5e1;
+}
+
+.waiting-text {
+    color: #94a3b8;
+
+    text-align: center;
+}
+
+
+/* =========================
+   手机
+========================= */
+
+@media (max-width: 700px) {
+
+    .container {
+        width: 94%;
+    }
+
+    h1 {
+        font-size: 30px;
+    }
+
+    .panel {
+        padding: 20px;
+    }
+
+    #playerList {
+        grid-template-columns:
+            1fr;
+    }
+
+    #players {
+        grid-template-columns:
+            repeat(2, 1fr);
+    }
+
+    .room-header {
+        align-items: flex-start;
+    }
+
+    .room-header strong {
+        font-size: 20px;
+    }
+
+    .player-card,
+    .card-hidden,
+    .card-visible {
+        min-height: 145px;
+    }
+
+    .player-name {
+        font-size: 16px;
+    }
+
+    .task-text {
+        font-size: 12px;
+    }
+}
+
+
+@media (max-width: 400px) {
+
+    #players {
+        gap: 8px;
+    }
+
+    .card-visible {
+        padding: 10px;
+    }
+
+    .player-name {
+        font-size: 14px;
+    }
+
+    .task-text {
+        font-size: 11px;
+    }
+}

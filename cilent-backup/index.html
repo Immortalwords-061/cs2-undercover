@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>CS2 内鬼模式</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>🎭 CS2 内鬼模式</h1>
+
+    <div id="lobby">
+
+        <div class="panel">
+
+            <h2>进入游戏</h2>
+
+            <input
+                id="nameInput"
+                type="text"
+                maxlength="16"
+                placeholder="输入你的昵称"
+            >
+
+            <div class="room-buttons">
+
+                <button onclick="createRoom()">
+                    创建房间
+                </button>
+
+                <button
+                    class="secondary"
+                    onclick="showJoinRoom()"
+                >
+                    加入房间
+                </button>
+
+            </div>
+
+        </div>
+
+        <div
+            id="joinPanel"
+            class="panel"
+            style="display:none;"
+        >
+
+            <h2>加入房间</h2>
+
+            <input
+                id="roomCodeInput"
+                type="text"
+                maxlength="6"
+                placeholder="输入6位房间号"
+            >
+
+            <button onclick="joinRoom()">
+                加入
+            </button>
+
+        </div>
+
+    </div>
+
+    <div
+        id="room"
+        style="display:none;"
+    >
+
+        <div class="panel">
+
+            <div class="room-header">
+
+                <div>
+                    <h2>🎮 游戏大厅</h2>
+
+                    <p>
+                        房间号：
+                        <strong id="roomCode">
+                            ------
+                        </strong>
+                    </p>
+                </div>
+
+                <div class="player-count">
+                    <span id="playerCount">0</span>
+                    / 10
+                </div>
+
+            </div>
+
+            <div id="playerList"></div>
+
+            <button
+                id="startButton"
+                onclick="startGame()"
+                style="display:none;"
+            >
+                🚀 开始游戏
+            </button>
+
+        </div>
+
+    </div>
+
+    <div
+        id="game"
+        style="display:none;"
+    >
+
+        <div class="panel">
+
+            <h2>
+                第 <span id="roundNumber">1</span> 局
+            </h2>
+
+            <p>
+                点击自己的名字查看身份和任务
+            </p>
+
+            <div id="players"></div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
