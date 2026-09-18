@@ -1,4 +1,4 @@
-const socket = io("http://localhost:3000");
+const socket = io("https://cs2-undercover.onrender.com");
 
 let myId = null;
 let myRoomCode = null;
