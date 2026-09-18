@@ -938,11 +938,48 @@ function showFinalResult(game) {
 
 function nextRound() {
 
-    if (!isHost) return;
+    console.log("点击了下一局");
+    console.log("当前房间:", myRoomCode);
+    console.log("当前是否房主:", isHost);
+    console.log("当前 socket:", socket.connected);
 
+    if (!isHost) {
+
+        alert("只有房主可以开始下一局");
+
+        return;
+    }
+
+    if (!socket.connected) {
+
+        alert("服务器连接已经断开，请刷新网页");
+
+        return;
+    }
 
     socket.emit(
-        "next_round"
+        "next_round",
+        result => {
+
+            console.log(
+                "服务器返回:",
+                result
+            );
+
+            if (!result) {
+                return;
+            }
+
+            if (!result.success) {
+
+                alert(
+                    result.message ||
+                    "下一局启动失败"
+                );
+
+            }
+
+        }
     );
 
 }
