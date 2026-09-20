@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
+
     <meta charset="UTF-8">
 
     <meta
@@ -10,14 +12,24 @@
 
     <title>CS2 游戏大厅</title>
 
-    <link rel="stylesheet" href="style.css">
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
 
     <script src="https://cs2-undercover.onrender.com/socket.io/socket.io.js"></script>
+
 </head>
+
 
 <body>
 
 <div class="container">
+
+
+    <!-- =========================
+         网站标题
+         ========================= -->
 
     <h1>🎮 CS2 游戏大厅</h1>
 
@@ -33,6 +45,8 @@
             <h2>进入游戏</h2>
 
 
+            <!-- 昵称 -->
+
             <input
                 id="nameInput"
                 type="text"
@@ -47,6 +61,7 @@
 
             <h3>选择游戏模式</h3>
 
+
             <div class="room-buttons">
 
                 <button
@@ -54,6 +69,7 @@
                 >
                     🎭 创建内鬼房间
                 </button>
+
 
                 <button
                     onclick="createRoom('TEAM')"
@@ -63,22 +79,67 @@
 
             </div>
 
+
+            <!-- =========================
+                 游戏人数
+                 ========================= -->
+
             <h3>选择游戏人数</h3>
 
+
             <select id="playerCountSelect">
-                <option value="6">6 人</option>
-                <option value="7">7 人</option>
-                <option value="8">8 人</option>
-                <option value="9">9 人</option>
-                <option value="10" selected>10 人</option>
-                <option value="11">11 人</option>
-                <option value="12">12 人</option>
-                <option value="13">13 人</option>
-                <option value="14">14 人</option>
-                <option value="15">15 人</option>
-                <option value="16">16 人</option>
+
+                <option value="6">
+                    6 人
+                </option>
+
+                <option value="7">
+                    7 人
+                </option>
+
+                <option value="8">
+                    8 人
+                </option>
+
+                <option value="9">
+                    9 人
+                </option>
+
+                <option
+                    value="10"
+                    selected
+                >
+                    10 人
+                </option>
+
+                <option value="11">
+                    11 人
+                </option>
+
+                <option value="12">
+                    12 人
+                </option>
+
+                <option value="13">
+                    13 人
+                </option>
+
+                <option value="14">
+                    14 人
+                </option>
+
+                <option value="15">
+                    15 人
+                </option>
+
+                <option value="16">
+                    16 人
+                </option>
+
             </select>
 
+
+            <!-- 加入已有房间 -->
 
             <button
                 class="secondary"
@@ -111,7 +172,9 @@
             >
 
 
-            <button onclick="joinRoom()">
+            <button
+                onclick="joinRoom()"
+            >
                 加入
             </button>
 
@@ -131,6 +194,9 @@
 
         <div class="panel">
 
+
+            <!-- 房间顶部信息 -->
+
             <div class="room-header">
 
                 <div>
@@ -139,22 +205,30 @@
 
 
                     <p>
+
                         房间号：
+
                         <strong id="roomCode">
                             ------
                         </strong>
+
                     </p>
 
 
                     <p>
+
                         游戏模式：
+
                         <strong id="roomMode">
                             ------
                         </strong>
+
                     </p>
 
                 </div>
 
+
+                <!-- 人数 -->
 
                 <div class="player-count">
 
@@ -173,22 +247,42 @@
             </div>
 
 
+            <!-- =========================
+                 玩家列表
+                 ========================= -->
+
             <div id="playerList"></div>
 
 
-            <button
-    id="startButton"
-    onclick="startGame()"
-    style="display:none;"
->
-    🚀 开始游戏
-</button>
+            <!-- =========================
+                 房主开始游戏
+                 ========================= -->
 
-<button
-    onclick="leaveRoom()"
->
-    🚪 退出房间
-</button>
+            <button
+                id="startButton"
+                onclick="startGame()"
+                style="display:none;"
+            >
+                🚀 开始游戏
+            </button>
+
+
+            <!-- =========================
+                 退出房间
+                 ========================= -->
+
+            <button
+                id="leaveRoomButton"
+                onclick="leaveRoom()"
+            >
+                🚪 退出房间
+            </button>
+
+
+        </div>
+
+    </div>
+
 
     <!-- =========================
          游戏页面
@@ -201,30 +295,49 @@
 
         <div class="panel">
 
+
+            <!-- 局数 -->
+
             <h2>
+
                 第
+
                 <span id="roundNumber">
                     1
                 </span>
+
                 局
+
             </h2>
 
+
+            <!-- 游戏提示 -->
 
             <p id="gameNotice">
                 点击自己的名字查看身份和任务
             </p>
 
 
+            <!-- 玩家 -->
+
             <div id="players"></div>
+
 
         </div>
 
     </div>
 
+
 </div>
 
 
+<!-- =========================
+     JavaScript
+     ========================= -->
+
 <script src="script.js"></script>
 
+
 </body>
+
 </html>
