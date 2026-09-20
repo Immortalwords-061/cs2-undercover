@@ -2182,7 +2182,6 @@ function leaveRoom() {
         );
 
         return;
-
     }
 
 
@@ -2193,7 +2192,6 @@ function leaveRoom() {
     ) {
 
         return;
-
     }
 
 
@@ -2225,23 +2223,25 @@ function leaveRoom() {
                 );
 
                 return;
-
             }
 
 
-            /*
-             * 清除本地房间记录
-             */
+            // ==========================================
+            // 清除本地保存的房间信息
+            // ==========================================
 
             localStorage.removeItem(
                 "cs2_room_code"
             );
 
-
             localStorage.removeItem(
                 "cs2_player_name"
             );
 
+
+            // ==========================================
+            // 清除当前游戏数据
+            // ==========================================
 
             myRoomCode =
                 null;
@@ -2259,13 +2259,135 @@ function leaveRoom() {
                 null;
 
 
-            /*
-             * 回到首页
-             */
+            // ==========================================
+            // 回到首页
+            // ==========================================
 
-            location.reload();
+            if (game) {
+
+                game.style.display =
+                    "none";
+
+            }
+
+
+            if (room) {
+
+                room.style.display =
+                    "none";
+
+            }
+
+
+            if (lobby) {
+
+                lobby.style.display =
+                    "block";
+
+            }
+
+
+            // 清空房间信息
+
+            const roomCodeElement =
+                document.getElementById(
+                    "roomCode"
+                );
+
+            if (roomCodeElement) {
+
+                roomCodeElement.textContent =
+                    "------";
+
+            }
+
+
+            const roomModeElement =
+                document.getElementById(
+                    "roomMode"
+                );
+
+            if (roomModeElement) {
+
+                roomModeElement.textContent =
+                    "------";
+
+            }
+
+
+            const playerListElement =
+                document.getElementById(
+                    "playerList"
+                );
+
+            if (playerListElement) {
+
+                playerListElement.innerHTML =
+                    "";
+
+            }
+
+
+            const playerCountElement =
+                document.getElementById(
+                    "playerCount"
+                );
+
+            if (playerCountElement) {
+
+                playerCountElement.textContent =
+                    "0";
+
+            }
+
+
+            const maxPlayerCountElement =
+                document.getElementById(
+                    "maxPlayerCount"
+                );
+
+            if (maxPlayerCountElement) {
+
+                maxPlayerCountElement.textContent =
+                    "10";
+
+            }
+
+
+            // 隐藏开始游戏按钮
+
+            const startButton =
+                document.getElementById(
+                    "startButton"
+                );
+
+            if (startButton) {
+
+                startButton.style.display =
+                    "none";
+
+            }
+
+
+            // 清空加入房间输入框
+
+            const roomCodeInput =
+                document.getElementById(
+                    "roomCodeInput"
+                );
+
+            if (roomCodeInput) {
+
+                roomCodeInput.value =
+                    "";
+
+            }
+
+
+            console.log(
+                "已经回到创建房间页面"
+            );
 
         }
     );
-
 }
