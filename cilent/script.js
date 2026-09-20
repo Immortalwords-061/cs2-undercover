@@ -663,14 +663,16 @@ function renderGame(gameData) {
         }
     );
 
-    /*
-     * 根据游戏状态添加按钮
-     */
-    if (
+   /*
+ * 根据游戏状态添加按钮
+ */
+if (
     gameData.state ===
     "REVEAL"
 ) {
     addGameControlButtons();
+}
+
 }
 
 
@@ -984,38 +986,7 @@ function addGameControlButtons() {
         );
     }
 }
-    /*
-     * 返回大厅
-     */
-    const backButton =
-        document.createElement(
-            "button"
-        );
 
-    backButton.textContent =
-        "🏠 返回大厅";
-
-    backButton.className =
-        "secondary";
-
-    backButton.style.marginLeft =
-        "10px";
-
-    backButton.onclick =
-        () => {
-            location.reload();
-        };
-
-    container.appendChild(
-        backButton
-    );
-
-    game.querySelector(
-        ".panel"
-    ).appendChild(
-        container
-    );
-}
 
 
 /* =========================
