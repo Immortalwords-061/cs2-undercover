@@ -27,7 +27,11 @@ function generateRoomCode() {
 // 创建房间
 // =========================
 
-function createRoom(hostSocketId, hostName) {
+function createRoom(
+    hostSocketId,
+    hostName,
+    mode = "UNDERCOVER"
+) {
 
     const code =
         generateRoomCode();
@@ -40,6 +44,10 @@ function createRoom(hostSocketId, hostName) {
         hostId: hostSocketId,
 
         hostName: hostName,
+
+        // UNDERCOVER = 10人内鬼模式
+        // TEAM = 8人分组模式
+        mode: mode,
 
         state: "WAITING",
 
@@ -81,16 +89,44 @@ function deleteRoom(code) {
 
 
 // =========================
+// 获取房间最大人数
+// =========================
+
+function getMaxPlayers(room) {
+
+    if (room.mode === "TEAM") {
+
+        return 8;
+
+    }
+
+    return 10;
+
+}
+
+
+// =========================
 // 添加玩家
 // =========================
 
 function addPlayer(room, player) {
 
-    if (room.players.length >= 10) {
+    const maxPlayers =
+        getMaxPlayers(room);
+
+
+    if (
+        room.players.length >=
+        maxPlayers
+    ) {
 
         return {
+
             success: false,
-            message: "房间已经满了"
+
+            message:
+                `房间已经满了，目前模式最多 ${maxPlayers} 人`
+
         };
 
     }
@@ -103,8 +139,11 @@ function addPlayer(room, player) {
     ) {
 
         return {
+
             success: false,
+
             message: "你已经在房间里了"
+
         };
 
     }
@@ -117,8 +156,12 @@ function addPlayer(room, player) {
     ) {
 
         return {
+
             success: false,
-            message: "这个昵称已经有人使用了"
+
+            message:
+                "这个昵称已经有人使用了"
+
         };
 
     }
@@ -128,8 +171,11 @@ function addPlayer(room, player) {
 
 
     return {
+
         success: true
+
     };
+
 }
 
 
@@ -137,11 +183,15 @@ function addPlayer(room, player) {
 // 移除玩家
 // =========================
 
-function removePlayer(room, socketId) {
+function removePlayer(
+    room,
+    socketId
+) {
 
     room.players =
         room.players.filter(
-            player => player.id !== socketId
+            player =>
+                player.id !== socketId
         );
 
 }
@@ -153,6 +203,10 @@ function removePlayer(room, socketId) {
 
 function getPublicRoom(room) {
 
+    const maxPlayers =
+        getMaxPlayers(room);
+
+
     return {
 
         code: room.code,
@@ -161,23 +215,37 @@ function getPublicRoom(room) {
 
         hostName: room.hostName,
 
+        mode: room.mode,
+
         state: room.state,
 
         round: room.round,
 
         players:
-            room.players.map(player => ({
-                id: player.id,
-                name: player.name
-            })),
+            room.players.map(
+                player => ({
+
+                    id: player.id,
+
+                    name: player.name
+
+                })
+            ),
 
         playerCount:
-            room.players.length
+            room.players.length,
+
+        maxPlayers:
+            maxPlayers
 
     };
 
 }
 
+
+// =========================
+// 导出
+// =========================
 
 module.exports = {
 
@@ -191,6 +259,8 @@ module.exports = {
 
     removePlayer,
 
-    getPublicRoom
+    getPublicRoom,
+
+    getMaxPlayers
 
 };

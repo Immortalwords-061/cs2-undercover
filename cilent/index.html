@@ -2,12 +2,13 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>CS2 内鬼模式</title>
+    <title>CS2 游戏大厅</title>
 
     <link rel="stylesheet" href="style.css">
 
@@ -18,13 +19,19 @@
 
 <div class="container">
 
-    <h1>🎭 CS2 内鬼模式</h1>
+    <h1>🎮 CS2 游戏大厅</h1>
+
+
+    <!-- =========================
+         首页
+         ========================= -->
 
     <div id="lobby">
 
         <div class="panel">
 
             <h2>进入游戏</h2>
+
 
             <input
                 id="nameInput"
@@ -33,22 +40,45 @@
                 placeholder="输入你的昵称"
             >
 
+
+            <!-- =========================
+                 创建房间
+                 ========================= -->
+
+            <h3>选择游戏模式</h3>
+
+
             <div class="room-buttons">
 
-                <button onclick="createRoom()">
-                    创建房间
+                <button
+                    onclick="createRoom('UNDERCOVER')"
+                >
+                    🎭 创建10人内鬼房间
                 </button>
 
+
                 <button
-                    class="secondary"
-                    onclick="showJoinRoom()"
+                    onclick="createRoom('TEAM')"
                 >
-                    加入房间
+                    ⚔️ 创建8人分组房间
                 </button>
 
             </div>
 
+
+            <button
+                class="secondary"
+                onclick="showJoinRoom()"
+            >
+                加入已有房间
+            </button>
+
         </div>
+
+
+        <!-- =========================
+             加入房间
+             ========================= -->
 
         <div
             id="joinPanel"
@@ -58,12 +88,14 @@
 
             <h2>加入房间</h2>
 
+
             <input
                 id="roomCodeInput"
                 type="text"
                 maxlength="6"
                 placeholder="输入6位房间号"
             >
+
 
             <button onclick="joinRoom()">
                 加入
@@ -72,6 +104,11 @@
         </div>
 
     </div>
+
+
+    <!-- =========================
+         游戏大厅
+         ========================= -->
 
     <div
         id="room"
@@ -83,7 +120,9 @@
             <div class="room-header">
 
                 <div>
+
                     <h2>🎮 游戏大厅</h2>
+
 
                     <p>
                         房间号：
@@ -91,16 +130,37 @@
                             ------
                         </strong>
                     </p>
+
+
+                    <p>
+                        游戏模式：
+                        <strong id="roomMode">
+                            ------
+                        </strong>
+                    </p>
+
                 </div>
 
+
                 <div class="player-count">
-                    <span id="playerCount">0</span>
-                    / 10
+
+                    <span id="playerCount">
+                        0
+                    </span>
+
+                    /
+
+                    <span id="maxPlayerCount">
+                        10
+                    </span>
+
                 </div>
 
             </div>
 
+
             <div id="playerList"></div>
+
 
             <button
                 id="startButton"
@@ -114,6 +174,11 @@
 
     </div>
 
+
+    <!-- =========================
+         游戏页面
+         ========================= -->
+
     <div
         id="game"
         style="display:none;"
@@ -122,12 +187,18 @@
         <div class="panel">
 
             <h2>
-                第 <span id="roundNumber">1</span> 局
+                第
+                <span id="roundNumber">
+                    1
+                </span>
+                局
             </h2>
 
-            <p>
+
+            <p id="gameNotice">
                 点击自己的名字查看身份和任务
             </p>
+
 
             <div id="players"></div>
 
@@ -136,6 +207,7 @@
     </div>
 
 </div>
+
 
 <script src="script.js"></script>
 

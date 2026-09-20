@@ -30,7 +30,7 @@ socket.on("connect", () => {
 // 创建房间
 // =========================
 
-function createRoom() {
+function createRoom(mode) {
 
     const name =
         document
@@ -49,7 +49,8 @@ function createRoom() {
     socket.emit(
         "create_room",
         {
-            name: name
+            name: name,
+            mode: mode
         },
         result => {
 
@@ -216,6 +217,24 @@ function updateRoomUI() {
         roomData.playerCount;
 
 
+    document
+        .getElementById("maxPlayerCount")
+        .textContent =
+        roomData.maxPlayers;
+
+
+    const modeText =
+        roomData.mode === "TEAM"
+            ? "⚔️ 8人分组模式"
+            : "🎭 10人内鬼模式";
+
+
+    document
+        .getElementById("roomMode")
+        .textContent =
+        modeText;
+
+
     const list =
         document
             .getElementById("playerList");
@@ -274,7 +293,8 @@ function updateRoomUI() {
 
     if (
         roomData.hostId === myId &&
-        roomData.playerCount === 10
+        roomData.playerCount ===
+            roomData.maxPlayers
     ) {
 
         startButton.style.display =
@@ -284,6 +304,21 @@ function updateRoomUI() {
 
         startButton.style.display =
             "none";
+
+    }
+
+
+    // 根据模式修改按钮文字
+
+    if (roomData.mode === "TEAM") {
+
+        startButton.textContent =
+            "⚔️ 开始8人分组游戏";
+
+    } else {
+
+        startButton.textContent =
+            "🚀 开始10人内鬼游戏";
 
     }
 
@@ -306,13 +341,20 @@ function startGame() {
     }
 
 
+    if (!roomData) {
+
+        return;
+
+    }
+
+
     if (
-        !roomData ||
-        roomData.playerCount !== 10
+        roomData.playerCount !==
+        roomData.maxPlayers
     ) {
 
         alert(
-            "必须正好10个人才能开始"
+            `需要正好 ${roomData.maxPlayers} 人才能开始`
         );
 
         return;
@@ -337,7 +379,9 @@ socket.on(
         console.log(
             "第",
             game.round,
-            "局开始"
+            "局开始",
+            "模式:",
+            game.mode
         );
 
 
@@ -409,35 +453,59 @@ function showGame(game) {
     container.innerHTML = "";
 
 
+    // =========================
     // 顶部提示
+    // =========================
 
     const notice =
         document.createElement(
             "div"
         );
 
+
     notice.className =
         "game-notice";
+
 
     notice.style.gridColumn =
         "1 / -1";
 
-    notice.innerHTML = `
-        <div>
-            🎮 第 ${game.round} 局进行中
-        </div>
 
-        <div>
-            点击自己的卡片查看身份
-        </div>
-    `;
+    if (game.mode === "TEAM") {
+
+        notice.innerHTML = `
+            <div>
+                ⚔️ 第 ${game.round} 局分组游戏
+            </div>
+
+            <div>
+                4 CT vs 4 T
+            </div>
+        `;
+
+    } else {
+
+        notice.innerHTML = `
+            <div>
+                🎭 第 ${game.round} 局内鬼游戏
+            </div>
+
+            <div>
+                点击自己的卡片查看身份和任务
+            </div>
+        `;
+
+    }
+
 
     container.appendChild(
         notice
     );
 
 
+    // =========================
     // 玩家卡片
+    // =========================
 
     game.players.forEach(
         player => {
@@ -455,6 +523,48 @@ function showGame(game) {
             card.dataset.playerId =
                 player.id;
 
+
+            // =========================
+            // 8人分组模式
+            // =========================
+
+            if (game.mode === "TEAM") {
+
+                card.innerHTML = `
+
+                    <div class="card-visible">
+
+                        <div class="player-name">
+                            ${escapeHTML(
+                                player.name
+                            )}
+                        </div>
+
+                        <div class="team-text">
+                            阵营：
+                            ${player.team === "CT"
+                                ? "🟦 CT"
+                                : "🟨 T"}
+                        </div>
+
+                    </div>
+
+                `;
+
+
+                container.appendChild(
+                    card
+                );
+
+
+                return;
+
+            }
+
+
+            // =========================
+            // 10人内鬼模式
+            // =========================
 
             card.innerHTML = `
 
@@ -523,7 +633,9 @@ function showGame(game) {
     );
 
 
-    // 房主显示结束按钮
+    // =========================
+    // 房主结束按钮
+    // =========================
 
     if (isHost) {
 
@@ -532,14 +644,18 @@ function showGame(game) {
                 "button"
             );
 
+
         finishButton.textContent =
             "🏁 结束本局";
+
 
         finishButton.onclick =
             finishGame;
 
+
         finishButton.style.gridColumn =
             "1 / -1";
+
 
         finishButton.style.margin =
             "20px auto";
@@ -570,10 +686,6 @@ function updateMyCard() {
 
 
     if (!card) return;
-
-
-    // 不自动打开
-    // 玩家仍然需要点击自己的卡
 
 }
 
@@ -724,7 +836,7 @@ function finishGame() {
 
     const confirmEnd =
         confirm(
-            "确定要结束本局并揭晓所有人的身份吗？"
+            "确定要结束本局吗？"
         );
 
 
@@ -747,7 +859,7 @@ socket.on(
     game => {
 
         console.log(
-            "游戏结束，身份揭晓:",
+            "游戏结束:",
             game
         );
 
@@ -797,29 +909,47 @@ function showFinalResult(game) {
     container.innerHTML = "";
 
 
+    // =========================
     // 标题
+    // =========================
 
     const title =
         document.createElement(
             "div"
         );
 
+
     title.className =
         "final-title";
+
 
     title.style.gridColumn =
         "1 / -1";
 
-    title.innerHTML = `
-        🎭 第 ${game.round} 局身份揭晓
-    `;
+
+    if (game.mode === "TEAM") {
+
+        title.innerHTML = `
+            ⚔️ 第 ${game.round} 局分组结果
+        `;
+
+    } else {
+
+        title.innerHTML = `
+            🎭 第 ${game.round} 局身份揭晓
+        `;
+
+    }
+
 
     container.appendChild(
         title
     );
 
 
+    // =========================
     // 玩家结果
+    // =========================
 
     game.players.forEach(
         player => {
@@ -833,6 +963,43 @@ function showFinalResult(game) {
             card.className =
                 "final-player";
 
+
+            // =========================
+            // 8人分组模式
+            // =========================
+
+            if (game.mode === "TEAM") {
+
+                card.innerHTML = `
+
+                    <strong>
+                        ${escapeHTML(
+                            player.name
+                        )}
+                    </strong>
+
+                    <span>
+                        ${
+                            player.team === "CT"
+                                ? "🟦 CT"
+                                : "🟨 T"
+                        }
+                    </span>
+
+                `;
+
+                container.appendChild(
+                    card
+                );
+
+                return;
+
+            }
+
+
+            // =========================
+            // 10人内鬼模式
+            // =========================
 
             const roleText =
                 player.role === "SPY"
@@ -873,7 +1040,9 @@ function showFinalResult(game) {
     );
 
 
+    // =========================
     // 房主下一局
+    // =========================
 
     if (isHost) {
 
@@ -938,24 +1107,45 @@ function showFinalResult(game) {
 
 function nextRound() {
 
-    console.log("点击了下一局");
-    console.log("当前房间:", myRoomCode);
-    console.log("当前是否房主:", isHost);
-    console.log("当前 socket:", socket.connected);
+    console.log(
+        "点击了下一局"
+    );
+
+    console.log(
+        "当前房间:",
+        myRoomCode
+    );
+
+    console.log(
+        "当前是否房主:",
+        isHost
+    );
+
+    console.log(
+        "当前 socket:",
+        socket.connected
+    );
+
 
     if (!isHost) {
 
-        alert("只有房主可以开始下一局");
+        alert(
+            "只有房主可以开始下一局"
+        );
 
         return;
     }
+
 
     if (!socket.connected) {
 
-        alert("服务器连接已经断开，请刷新网页");
+        alert(
+            "服务器连接已经断开，请刷新网页"
+        );
 
         return;
     }
+
 
     socket.emit(
         "next_round",
@@ -966,9 +1156,13 @@ function nextRound() {
                 result
             );
 
+
             if (!result) {
+
                 return;
+
             }
+
 
             if (!result.success) {
 
@@ -1014,4 +1208,5 @@ function escapeHTML(text) {
         text;
 
     return div.innerHTML;
+
 }

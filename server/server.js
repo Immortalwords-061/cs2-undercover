@@ -9,7 +9,8 @@ const {
     addPlayer,
     removePlayer,
     deleteRoom,
-    getPublicRoom
+    getPublicRoom,
+    getMaxPlayers
 } = require("./roomManager");
 
 const {
@@ -83,7 +84,7 @@ io.on(
 
         socket.on(
             "create_room",
-            ({ name }, callback) => {
+            ({ name, mode }, callback) => {
 
                 if (!name) {
 
@@ -96,10 +97,24 @@ io.on(
                 }
 
 
+                // 默认还是10人内鬼模式
+                // 防止旧客户端出问题
+
+                if (
+                    mode !== "TEAM" &&
+                    mode !== "UNDERCOVER"
+                ) {
+
+                    mode = "UNDERCOVER";
+
+                }
+
+
                 const room =
                     createRoom(
                         socket.id,
-                        name
+                        name,
+                        mode
                     );
 
 
@@ -127,7 +142,7 @@ io.on(
 
 
                 console.log(
-                    `房间 ${room.code} 创建`
+                    `房间 ${room.code} 创建，模式: ${mode}`
                 );
 
 
@@ -302,14 +317,18 @@ io.on(
                 }
 
 
+                const maxPlayers =
+                    getMaxPlayers(room);
+
+
                 if (
                     room.players.length !==
-                    10
+                    maxPlayers
                 ) {
 
                     socket.emit(
                         "error_message",
-                        "必须正好10个人才能开始游戏"
+                        `当前有 ${room.players.length} 人，需要正好 ${maxPlayers} 人才能开始游戏`
                     );
 
                     return;
@@ -322,7 +341,8 @@ io.on(
                 const game =
                     createGame(
                         room.players,
-                        room.round
+                        room.round,
+                        room.mode
                     );
 
 
@@ -340,6 +360,7 @@ io.on(
 
 
                 // 给所有人发送公开信息
+
                 io.to(room.code).emit(
                     "game_started",
                     getPublicGame(
@@ -349,30 +370,41 @@ io.on(
                 );
 
 
-                // 每个人单独发送自己的身份
-                room.players.forEach(
-                    player => {
+                // =========================
+                // 只有内鬼模式需要发送
+                // 私人身份信息
+                // =========================
 
-                        const info =
-                            getPrivatePlayerInfo(
-                                game,
+                if (
+                    room.mode ===
+                    "UNDERCOVER"
+                ) {
+
+                    room.players.forEach(
+                        player => {
+
+                            const info =
+                                getPrivatePlayerInfo(
+                                    game,
+                                    player.id
+                                );
+
+
+                            io.to(
                                 player.id
+                            ).emit(
+                                "private_role",
+                                info
                             );
 
+                        }
+                    );
 
-                        io.to(
-                            player.id
-                        ).emit(
-                            "private_role",
-                            info
-                        );
-
-                    }
-                );
+                }
 
 
                 console.log(
-                    `房间 ${room.code} 第 ${room.round} 局开始`
+                    `房间 ${room.code} 第 ${room.round} 局开始，模式: ${room.mode}`
                 );
 
             }
@@ -398,6 +430,18 @@ io.on(
 
                 if (!room.currentGame)
                     return;
+
+
+                // 8人分组模式没有秘密身份
+
+                if (
+                    room.mode ===
+                    "TEAM"
+                ) {
+
+                    return;
+
+                }
 
 
                 const info =
@@ -461,7 +505,8 @@ io.on(
                     "REVEAL";
 
 
-                // 游戏结束后公开全部身份
+                // 游戏结束后公开全部信息
+
                 io.to(room.code).emit(
                     "game_finished",
                     getPublicGame(
@@ -533,9 +578,13 @@ io.on(
                 }
 
 
+                const maxPlayers =
+                    getMaxPlayers(room);
+
+
                 if (
                     room.players.length !==
-                    10
+                    maxPlayers
                 ) {
 
                     if (callback) {
@@ -543,7 +592,7 @@ io.on(
                         callback({
                             success: false,
                             message:
-                                `当前只有 ${room.players.length} 人，必须正好10个人才能开始下一局`
+                                `当前只有 ${room.players.length} 人，必须正好 ${maxPlayers} 个人才能开始下一局`
                         });
 
                     }
@@ -558,7 +607,8 @@ io.on(
                 const game =
                     createGame(
                         room.players,
-                        room.round
+                        room.round,
+                        room.mode
                     );
 
 
@@ -589,32 +639,40 @@ io.on(
 
 
                 // =========================
-                // 单独发送每个人的秘密身份
+                // 只有10人内鬼模式
+                // 才发送秘密身份
                 // =========================
 
-                room.players.forEach(
-                    player => {
+                if (
+                    room.mode ===
+                    "UNDERCOVER"
+                ) {
 
-                        const info =
-                            getPrivatePlayerInfo(
-                                game,
+                    room.players.forEach(
+                        player => {
+
+                            const info =
+                                getPrivatePlayerInfo(
+                                    game,
+                                    player.id
+                                );
+
+
+                            io.to(
                                 player.id
+                            ).emit(
+                                "private_role",
+                                info
                             );
 
+                        }
+                    );
 
-                        io.to(
-                            player.id
-                        ).emit(
-                            "private_role",
-                            info
-                        );
-
-                    }
-                );
+                }
 
 
                 console.log(
-                    `房间 ${room.code} 第 ${room.round} 局开始`
+                    `房间 ${room.code} 第 ${room.round} 局开始，模式: ${room.mode}`
                 );
 
 
@@ -665,6 +723,7 @@ io.on(
 
 
                 // 房主断开
+
                 if (
                     room.hostId ===
                     socket.id
@@ -688,6 +747,7 @@ io.on(
 
 
                 // 房间没人了
+
                 if (
                     room.players.length ===
                     0
