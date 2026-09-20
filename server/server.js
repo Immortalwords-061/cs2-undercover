@@ -1,14 +1,13 @@
 const express = require("express");
 const http = require("http");
-const cors = require("cors");
 const { Server } = require("socket.io");
 
 const {
     createRoom,
     getRoom,
+    deleteRoom,
     addPlayer,
     removePlayer,
-    deleteRoom,
     getPublicRoom,
     getMaxPlayers
 } = require("./roomManager");
@@ -19,818 +18,740 @@ const {
     getPrivatePlayerInfo
 } = require("./gameManager");
 
-
 const app = express();
 
-app.use(cors());
-
-
-// =========================
-// HTTP 测试接口
-// =========================
+app.use(express.json());
 
 app.get("/", (req, res) => {
-
     res.json({
         message: "CS2 Undercover Server",
         status: "running"
     });
-
 });
 
+const server = http.createServer(app);
 
-const server =
-    http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
+const PORT =
+    process.env.PORT || 3000;
 
-// =========================
-// Socket.IO
-// =========================
+/*
+ * 同步当前游戏中的玩家 socket ID
+ *
+ * 玩家刷新网页后，
+ * socket.id 会发生变化。
+ *
+ * 所以需要根据玩家昵称
+ * 找到旧的游戏玩家并更新 ID。
+ */
+function syncGamePlayerSocketId(
+    room,
+    name,
+    newSocketId
+) {
+    if (!room.currentGame) {
+        return;
+    }
 
-const io =
-    new Server(server, {
-
-        cors: {
-
-            origin: "*",
-
-            methods: [
-                "GET",
-                "POST"
-            ]
-
-        }
-
-    });
-
-
-// =========================
-// 玩家连接
-// =========================
-
-io.on(
-    "connection",
-    socket => {
-
-        console.log(
-            "玩家连接:",
-            socket.id
+    const gamePlayer =
+        room.currentGame.players.find(
+            player =>
+                player.name === name
         );
 
-
-        // =========================
-        // Socket 重连恢复房间
-        // =========================
-
-// =========================
-// 加入房间 / 重新进入游戏
-// =========================
-
-socket.on(
-    "join_room",
-    ({ code, name }, callback) => {
-
-        if (!name) {
-
-            callback({
-                success: false,
-                message: "请输入昵称"
-            });
-
-            return;
-        }
-
-
-        const room =
-            getRoom(code);
-
-
-        if (!room) {
-
-            callback({
-
-                success: false,
-
-                message:
-                    "房间不存在"
-
-            });
-
-            return;
-        }
-
-
-        // =========================
-        // 检查这个玩家是不是已经在房间里
-        // =========================
-
-        const existingPlayer =
-            room.players.find(
-                player =>
-                    player.name === name
-            );
-
-
-        // =========================
-        // 已经在房间里
-        // =========================
-        // 这种情况可能是：
-        //
-        // 1. 浏览器刷新
-        // 2. Socket 重连
-        // 3. 手机切后台
-        // 4. 网络断线
-        //
-        // 无论游戏是否已经开始
-        // 都允许恢复
-        // =========================
-
-        if (existingPlayer) {
-
-            const oldSocketId =
-                existingPlayer.id;
-
-
-            // 更新 Socket ID
-
-            existingPlayer.id =
-                socket.id;
-
-
-            // 记录房间
-
-            socket.roomCode =
-                room.code;
-
-
-            // 重新加入 Socket.IO 房间
-
-            socket.join(
-                room.code
-            );
-
-
-            // 如果是房主
-            // 恢复房主身份
-
-            if (
-                room.hostName ===
-                name
-            ) {
-
-                room.hostId =
-                    socket.id;
-
-            }
-
-
-            console.log(
-                `玩家 ${name} 重新进入房间 ${room.code}`
-            );
-
-
-            callback({
-
-                success: true,
-
-                room:
-                    getPublicRoom(
-                        room
-                    ),
-
-                rejoined: true
-
-            });
-
-
-            // =========================
-            // 通知房间其他玩家
-            // =========================
-
-            io.to(room.code).emit(
-                "room_update",
-                getPublicRoom(
-                    room
-                )
-            );
-
-
-            // =========================
-            // 如果游戏正在进行
-            // 直接恢复当前游戏
-            // =========================
-
-            if (
-                room.currentGame &&
-                room.state ===
-                    "PLAYING"
-            ) {
-
-                console.log(
-                    `恢复玩家 ${name} 到第 ${room.currentGame.round} 局`
-                );
-
-
-                // 发送当前游戏
-
-                socket.emit(
-                    "game_started",
-                    getPublicGame(
-                        room.currentGame,
-                        false
-                    )
-                );
-
-
-                // =========================
-                // 10人内鬼模式
-                // 重新发送秘密身份
-                // =========================
-
-                if (
-                    room.mode ===
-                    "UNDERCOVER"
-                ) {
-
-                    const info =
-                        getPrivatePlayerInfo(
-                            room.currentGame,
-                            socket.id
-                        );
-
-
-                    if (info) {
-
-                        socket.emit(
-                            "private_role",
-                            info
-                        );
-
-                    }
-
-                }
-
-            }
-
-
-            // =========================
-            // 如果游戏已经结束
-            // =========================
-
-            if (
-                room.currentGame &&
-                room.state ===
-                    "REVEAL"
-            ) {
-
-                socket.emit(
-                    "game_finished",
-                    getPublicGame(
-                        room.currentGame,
-                        true
-                    )
-                );
-
-            }
-
-
-            return;
-        }
-
-
-        // =========================
-        // 新玩家
-        // =========================
-
-        if (
-            room.state !==
-            "WAITING"
-        ) {
-
-            callback({
-
-                success: false,
-
-                message:
-                    "游戏已经开始，无法加入"
-
-            });
-
-            return;
-        }
-
-
-        // =========================
-        // 正常加入新玩家
-        // =========================
-
-        const result =
-            addPlayer(
-                room,
-                {
-                    id: socket.id,
-                    name: name
-                }
-            );
-
-
-        if (!result.success) {
-
-            callback(result);
-
-            return;
-        }
-
-
-        socket.join(
-            room.code
-        );
-
-
-        socket.roomCode =
-            room.code;
-
-
-        callback({
-
-            success: true,
-
-            room:
-                getPublicRoom(
-                    room
-                ),
-
-            rejoined: false
-
-        });
-
-
-        io.to(room.code).emit(
-            "room_update",
-            getPublicRoom(
-                room
+    if (gamePlayer) {
+        gamePlayer.id =
+            newSocketId;
+    }
+}
+
+/*
+ * 给重新连接的玩家
+ * 恢复当前游戏状态
+ */
+function sendCurrentGameToSocket(
+    socket,
+    room
+) {
+    if (!room.currentGame) {
+        return;
+    }
+
+    /*
+     * 游戏进行中
+     */
+    if (room.state === "PLAYING") {
+        socket.emit(
+            "game_started",
+            getPublicGame(
+                room.currentGame,
+                false
             )
         );
 
+        /*
+         * 只有内鬼模式
+         * 才发送私人身份信息
+         */
+        if (
+            room.mode ===
+            "UNDERCOVER"
+        ) {
+            const info =
+                getPrivatePlayerInfo(
+                    room.currentGame,
+                    socket.id
+                );
 
-        console.log(
-            `${name} 加入房间 ${code}`
-        );
-
+            if (info) {
+                socket.emit(
+                    "private_role",
+                    info
+                );
+            }
+        }
     }
-);
 
-        // =========================
-        // 创建房间
-        // =========================
+    /*
+     * 游戏已经结束，
+     * 正在显示身份
+     */
+    if (room.state === "REVEAL") {
+        socket.emit(
+            "game_finished",
+            getPublicGame(
+                room.currentGame,
+                true
+            )
+        );
+    }
+}
 
-        socket.on(
-            "create_room",
-            ({ name, mode }, callback) => {
+io.on("connection", socket => {
+    console.log(
+        "玩家连接:",
+        socket.id
+    );
 
-                if (!name) {
+    /*
+     * =========================
+     * 创建房间
+     * =========================
+     */
+    socket.on(
+        "create_room",
+        data => {
+            try {
+                const {
+                    name,
+                    mode,
+                    maxPlayers
+                } = data || {};
 
-                    callback({
-                        success: false,
-                        message: "请输入昵称"
-                    });
-
+                if (
+                    !name ||
+                    !name.trim()
+                ) {
+                    socket.emit(
+                        "error_message",
+                        "请输入昵称"
+                    );
                     return;
                 }
 
+                const playerName =
+                    name.trim();
 
-                // 默认10人内鬼模式
-                // 防止旧客户端出问题
+                /*
+                 * 人数必须 6~16
+                 */
+                const count =
+                    Number(maxPlayers);
 
                 if (
-                    mode !== "TEAM" &&
-                    mode !== "UNDERCOVER"
+                    !Number.isInteger(
+                        count
+                    ) ||
+                    count < 6 ||
+                    count > 16
                 ) {
-
-                    mode =
-                        "UNDERCOVER";
-
+                    socket.emit(
+                        "error_message",
+                        "游戏人数必须选择6到16人"
+                    );
+                    return;
                 }
-
 
                 const room =
                     createRoom(
                         socket.id,
-                        name,
-                        mode
+                        playerName,
+                        mode,
+                        count
                     );
 
-
-                const player = {
-
+                /*
+                 * 创建房主玩家
+                 */
+                room.players.push({
                     id: socket.id,
+                    name: playerName,
+                    team: null,
+                    role: null,
+                    task: null
+                });
 
-                    name: name
+                socket.roomCode =
+                    room.code;
 
-                };
-
-
-                room.players.push(
-                    player
-                );
-
+                socket.playerName =
+                    playerName;
 
                 socket.join(
                     room.code
                 );
 
+                socket.emit(
+                    "room_created",
+                    getPublicRoom(room)
+                );
+
+                io.to(room.code).emit(
+                    "room_update",
+                    getPublicRoom(room)
+                );
+
+                console.log(
+                    `房间创建成功: ${room.code}, ` +
+                    `模式: ${room.mode}, ` +
+                    `人数: ${room.maxPlayers}`
+                );
+            } catch (error) {
+                console.error(
+                    "create_room 错误:",
+                    error
+                );
+
+                socket.emit(
+                    "error_message",
+                    "创建房间失败"
+                );
+            }
+        }
+    );
+
+    /*
+     * =========================
+     * 自动重连
+     * =========================
+     *
+     * 玩家刷新网页以后，
+     * socket.id 会改变。
+     *
+     * 前端会把原来的昵称
+     * 和房间号重新发送过来。
+     */
+    socket.on(
+        "rejoin_room",
+        data => {
+            try {
+                const {
+                    roomCode,
+                    name
+                } = data || {};
+
+                if (
+                    !roomCode ||
+                    !name
+                ) {
+                    socket.emit(
+                        "rejoin_failed",
+                        "缺少房间号或昵称"
+                    );
+                    return;
+                }
+
+                const room =
+                    getRoom(roomCode);
+
+                if (!room) {
+                    socket.emit(
+                        "rejoin_failed",
+                        "房间不存在，可能已经关闭"
+                    );
+                    return;
+                }
+
+                const player =
+                    room.players.find(
+                        p =>
+                            p.name ===
+                            name
+                    );
+
+                if (!player) {
+                    socket.emit(
+                        "rejoin_failed",
+                        "房间中没有找到这个玩家"
+                    );
+                    return;
+                }
+
+                /*
+                 * 更新 socket ID
+                 */
+                player.id =
+                    socket.id;
 
                 socket.roomCode =
                     room.code;
 
+                socket.playerName =
+                    player.name;
 
-                console.log(
-                    `房间 ${room.code} 创建，模式: ${mode}`
+                socket.join(
+                    room.code
                 );
 
+                /*
+                 * 如果这个玩家原本是房主，
+                 * 恢复房主身份
+                 */
+                if (
+                    room.hostName ===
+                    player.name
+                ) {
+                    room.hostId =
+                        socket.id;
+                }
 
-                callback({
+                /*
+                 * 更新当前游戏里的 ID
+                 */
+                syncGamePlayerSocketId(
+                    room,
+                    player.name,
+                    socket.id
+                );
 
-                    success: true,
-
-                    roomCode:
-                        room.code,
-
-                    room:
-                        getPublicRoom(
-                            room
-                        )
-
-                });
-
+                socket.emit(
+                    "rejoin_success",
+                    getPublicRoom(room)
+                );
 
                 io.to(room.code).emit(
                     "room_update",
-                    getPublicRoom(
-                        room
-                    )
+                    getPublicRoom(room)
                 );
 
+                /*
+                 * 如果游戏已经开始，
+                 * 恢复游戏画面
+                 */
+                sendCurrentGameToSocket(
+                    socket,
+                    room
+                );
+
+                console.log(
+                    `玩家重连成功: ${player.name}, ` +
+                    `房间: ${room.code}`
+                );
+            } catch (error) {
+                console.error(
+                    "rejoin_room 错误:",
+                    error
+                );
+
+                socket.emit(
+                    "rejoin_failed",
+                    "重新连接失败"
+                );
             }
-        );
+        }
+    );
 
+    /*
+     * =========================
+     * 加入房间
+     * =========================
+     */
+    socket.on(
+        "join_room",
+        data => {
+            try {
+                const {
+                    roomCode,
+                    name
+                } = data || {};
 
-        // =========================
-        // 加入房间
-        // =========================
-
-        socket.on(
-            "join_room",
-            ({ code, name }, callback) => {
-
-                if (!name) {
-
-                    callback({
-                        success: false,
-                        message: "请输入昵称"
-                    });
-
+                if (
+                    !roomCode ||
+                    !name ||
+                    !name.trim()
+                ) {
+                    socket.emit(
+                        "error_message",
+                        "请输入房间号和昵称"
+                    );
                     return;
                 }
 
+                const code =
+                    roomCode.trim();
+
+                const playerName =
+                    name.trim();
 
                 const room =
                     getRoom(code);
 
-
                 if (!room) {
+                    socket.emit(
+                        "error_message",
+                        "房间不存在"
+                    );
+                    return;
+                }
 
-                    callback({
+                /*
+                 * 如果玩家已经存在，
+                 * 说明可能是刷新页面后的重新进入。
+                 */
+                const existingPlayer =
+                    room.players.find(
+                        player =>
+                            player.name ===
+                            playerName
+                    );
 
-                        success: false,
+                if (existingPlayer) {
+                    existingPlayer.id =
+                        socket.id;
 
-                        message:
-                            "房间不存在"
+                    socket.roomCode =
+                        room.code;
 
-                    });
+                    socket.playerName =
+                        existingPlayer.name;
+
+                    socket.join(
+                        room.code
+                    );
+
+                    if (
+                        room.hostName ===
+                        existingPlayer.name
+                    ) {
+                        room.hostId =
+                            socket.id;
+                    }
+
+                    syncGamePlayerSocketId(
+                        room,
+                        existingPlayer.name,
+                        socket.id
+                    );
+
+                    socket.emit(
+                        "join_success",
+                        getPublicRoom(room)
+                    );
+
+                    io.to(room.code).emit(
+                        "room_update",
+                        getPublicRoom(room)
+                    );
+
+                    sendCurrentGameToSocket(
+                        socket,
+                        room
+                    );
+
+                    console.log(
+                        `玩家重新加入: ${playerName}, ` +
+                        `房间: ${room.code}`
+                    );
 
                     return;
                 }
 
-
+                /*
+                 * 新玩家只能加入等待中的房间
+                 */
                 if (
                     room.state !==
                     "WAITING"
                 ) {
-
-                    callback({
-
-                        success: false,
-
-                        message:
-                            "游戏已经开始，无法加入"
-
-                    });
-
+                    socket.emit(
+                        "error_message",
+                        "游戏已经开始，无法加入新玩家"
+                    );
                     return;
                 }
-
 
                 const result =
                     addPlayer(
                         room,
                         {
                             id: socket.id,
-                            name: name
+                            name: playerName,
+                            team: null,
+                            role: null,
+                            task: null
                         }
                     );
 
-
                 if (!result.success) {
-
-                    callback(result);
-
+                    socket.emit(
+                        "error_message",
+                        result.message
+                    );
                     return;
                 }
 
+                socket.roomCode =
+                    room.code;
+
+                socket.playerName =
+                    playerName;
 
                 socket.join(
                     room.code
                 );
 
-
-                socket.roomCode =
-                    room.code;
-
-
-                callback({
-
-                    success: true,
-
-                    roomCode:
-                        room.code,
-
-                    room:
-                        getPublicRoom(
-                            room
-                        )
-
-                });
-
+                socket.emit(
+                    "join_success",
+                    getPublicRoom(room)
+                );
 
                 io.to(room.code).emit(
                     "room_update",
-                    getPublicRoom(
-                        room
-                    )
+                    getPublicRoom(room)
                 );
-
 
                 console.log(
-                    `${name} 加入房间 ${code}`
+                    `玩家加入: ${playerName}, ` +
+                    `房间: ${room.code}`
+                );
+            } catch (error) {
+                console.error(
+                    "join_room 错误:",
+                    error
                 );
 
+                socket.emit(
+                    "error_message",
+                    "加入房间失败"
+                );
             }
-        );
+        }
+    );
 
-
-        // =========================
-        // 开始游戏
-        // =========================
-
-        socket.on(
-            "start_game",
-            () => {
+    /*
+     * =========================
+     * 开始游戏
+     * =========================
+     */
+    socket.on(
+        "start_game",
+        () => {
+            try {
+                const roomCode =
+                    socket.roomCode;
 
                 const room =
-                    getRoom(
-                        socket.roomCode
+                    getRoom(roomCode);
+
+                if (!room) {
+                    socket.emit(
+                        "error_message",
+                        "房间不存在"
                     );
+                    return;
+                }
 
-
-                if (!room) return;
-
-
+                /*
+                 * 只有房主可以开始
+                 */
                 if (
                     room.hostId !==
                     socket.id
                 ) {
-
                     socket.emit(
                         "error_message",
                         "只有房主可以开始游戏"
                     );
-
                     return;
                 }
 
+                if (
+                    room.state !==
+                    "WAITING"
+                ) {
+                    socket.emit(
+                        "error_message",
+                        "游戏已经开始"
+                    );
+                    return;
+                }
 
                 const maxPlayers =
                     getMaxPlayers(room);
 
-
+                /*
+                 * 必须达到指定人数
+                 */
                 if (
                     room.players.length !==
                     maxPlayers
                 ) {
-
                     socket.emit(
                         "error_message",
-                        `当前有 ${room.players.length} 人，需要正好 ${maxPlayers} 人才能开始游戏`
+                        `需要 ${maxPlayers} 人才能开始游戏，目前有 ${room.players.length} 人`
                     );
-
                     return;
                 }
 
+                room.round = 1;
 
-                room.round++;
-
-
-                const game =
+                room.currentGame =
                     createGame(
                         room.players,
                         room.round,
                         room.mode
                     );
 
-
-                room.games.push(
-                    game
-                );
-
-
-                room.currentGame =
-                    game;
-
-
                 room.state =
                     "PLAYING";
 
-
-                // 给所有人发送公开信息
-
+                /*
+                 * 公开信息
+                 */
                 io.to(room.code).emit(
                     "game_started",
                     getPublicGame(
-                        game,
+                        room.currentGame,
                         false
                     )
                 );
 
-
-                // =========================
-                // 只有10人内鬼模式需要
-                // 发送私人身份信息
-                // =========================
-
+                /*
+                 * 私人身份
+                 */
                 if (
                     room.mode ===
                     "UNDERCOVER"
                 ) {
-
                     room.players.forEach(
                         player => {
-
-                            const info =
-                                getPrivatePlayerInfo(
-                                    game,
+                            const playerSocket =
+                                io.sockets.sockets.get(
                                     player.id
                                 );
 
+                            if (
+                                !playerSocket
+                            ) {
+                                return;
+                            }
 
-                            io.to(
-                                player.id
-                            ).emit(
-                                "private_role",
-                                info
-                            );
+                            const info =
+                                getPrivatePlayerInfo(
+                                    room.currentGame,
+                                    player.id
+                                );
 
+                            if (info) {
+                                playerSocket.emit(
+                                    "private_role",
+                                    info
+                                );
+                            }
                         }
                     );
-
                 }
-
 
                 console.log(
-                    `房间 ${room.code} 第 ${room.round} 局开始，模式: ${room.mode}`
+                    `游戏开始: ${room.code}, ` +
+                    `第 ${room.round} 局, ` +
+                    `模式: ${room.mode}, ` +
+                    `人数: ${room.players.length}`
                 );
-
-            }
-        );
-
-
-        // =========================
-        // 请求自己的身份
-        // =========================
-
-        socket.on(
-            "request_private_role",
-            () => {
-
-                const room =
-                    getRoom(
-                        socket.roomCode
-                    );
-
-
-                if (!room) return;
-
-
-                if (!room.currentGame) {
-                    return;
-                }
-
-
-                // 8人分组模式没有秘密身份
-
-                if (
-                    room.mode ===
-                    "TEAM"
-                ) {
-
-                    return;
-
-                }
-
-
-                const info =
-                    getPrivatePlayerInfo(
-                        room.currentGame,
-                        socket.id
-                    );
-
-
-                if (!info) return;
-
+            } catch (error) {
+                console.error(
+                    "start_game 错误:",
+                    error
+                );
 
                 socket.emit(
-                    "private_role",
-                    info
+                    "error_message",
+                    "开始游戏失败"
                 );
-
             }
-        );
+        }
+    );
 
-
-        // =========================
-        // 结束本局
-        // =========================
-
-        socket.on(
-            "finish_game",
-            () => {
-
-                console.log(
-                    "收到结束游戏请求:",
-                    socket.id
-                );
-
+    /*
+     * =========================
+     * 结束游戏
+     * =========================
+     */
+    socket.on(
+        "finish_game",
+        () => {
+            try {
+                const roomCode =
+                    socket.roomCode;
 
                 const room =
-                    getRoom(
-                        socket.roomCode
-                    );
-
+                    getRoom(roomCode);
 
                 if (!room) {
-
-                    console.log(
-                        "结束游戏失败：房间不存在"
+                    socket.emit(
+                        "error_message",
+                        "房间不存在"
                     );
-
                     return;
                 }
-
 
                 if (
                     room.hostId !==
                     socket.id
                 ) {
-
-                    console.log(
-                        "结束游戏失败：不是房主"
+                    socket.emit(
+                        "error_message",
+                        "只有房主可以结束游戏"
                     );
-
                     return;
                 }
-
 
                 if (
-                    !room.currentGame
+                    room.state !==
+                    "PLAYING"
                 ) {
-
-                    console.log(
-                        "结束游戏失败：没有当前游戏"
+                    socket.emit(
+                        "error_message",
+                        "当前不是进行中的游戏"
                     );
-
                     return;
                 }
-
-
-                room.currentGame.state =
-                    "REVEAL";
-
 
                 room.state =
                     "REVEAL";
 
-
-                // 游戏结束后公开全部信息
+                if (
+                    room.currentGame
+                ) {
+                    room.currentGame.state =
+                        "REVEAL";
+                }
 
                 io.to(room.code).emit(
                     "game_finished",
@@ -840,375 +761,289 @@ socket.on(
                     )
                 );
 
-
-                console.log(
-                    `房间 ${room.code} 第 ${room.round} 局结束`
+                io.to(room.code).emit(
+                    "room_update",
+                    getPublicRoom(room)
                 );
 
+                console.log(
+                    `游戏结束: ${room.code}`
+                );
+            } catch (error) {
+                console.error(
+                    "finish_game 错误:",
+                    error
+                );
+
+                socket.emit(
+                    "error_message",
+                    "结束游戏失败"
+                );
             }
-        );
+        }
+    );
 
-
-        // =========================
-        // 下一局
-        // =========================
-
-        socket.on(
-            "next_round",
-            callback => {
-
-                console.log(
-                    "收到下一局请求:",
-                    socket.id
-                );
-
+    /*
+     * =========================
+     * 下一局
+     * =========================
+     */
+    socket.on(
+        "next_round",
+        () => {
+            try {
+                const roomCode =
+                    socket.roomCode;
 
                 const room =
-                    getRoom(
-                        socket.roomCode
-                    );
-
+                    getRoom(roomCode);
 
                 if (!room) {
-
-                    if (callback) {
-
-                        callback({
-                            success: false,
-                            message:
-                                "房间不存在"
-                        });
-
-                    }
-
+                    socket.emit(
+                        "error_message",
+                        "房间不存在"
+                    );
                     return;
                 }
-
 
                 if (
                     room.hostId !==
                     socket.id
                 ) {
-
-                    if (callback) {
-
-                        callback({
-                            success: false,
-                            message:
-                                "只有房主可以开始下一局"
-                        });
-
-                    }
-
+                    socket.emit(
+                        "error_message",
+                        "只有房主可以开始下一局"
+                    );
                     return;
                 }
 
+                if (
+                    room.state !==
+                    "REVEAL"
+                ) {
+                    socket.emit(
+                        "error_message",
+                        "当前不能开始下一局"
+                    );
+                    return;
+                }
 
                 const maxPlayers =
                     getMaxPlayers(room);
 
-
+                /*
+                 * 下一局之前检查人数
+                 */
                 if (
                     room.players.length !==
                     maxPlayers
                 ) {
-
-                    if (callback) {
-
-                        callback({
-                            success: false,
-                            message:
-                                `当前只有 ${room.players.length} 人，必须正好 ${maxPlayers} 个人才能开始下一局`
-                        });
-
-                    }
-
+                    socket.emit(
+                        "error_message",
+                        `需要 ${maxPlayers} 人才能开始下一局`
+                    );
                     return;
                 }
 
+                room.round += 1;
 
-                room.round++;
-
-
-                const game =
+                room.currentGame =
                     createGame(
                         room.players,
                         room.round,
                         room.mode
                     );
 
-
-                room.games.push(
-                    game
-                );
-
-
-                room.currentGame =
-                    game;
-
-
                 room.state =
                     "PLAYING";
 
-
-                // =========================
-                // 通知所有玩家：新一局开始
-                // =========================
-
+                /*
+                 * 公开游戏信息
+                 */
                 io.to(room.code).emit(
                     "game_started",
                     getPublicGame(
-                        game,
+                        room.currentGame,
                         false
                     )
                 );
 
-
-                // =========================
-                // 只有10人内鬼模式
-                // 才发送秘密身份
-                // =========================
-
+                /*
+                 * 私人信息
+                 */
                 if (
                     room.mode ===
                     "UNDERCOVER"
                 ) {
-
                     room.players.forEach(
                         player => {
-
-                            const info =
-                                getPrivatePlayerInfo(
-                                    game,
+                            const playerSocket =
+                                io.sockets.sockets.get(
                                     player.id
                                 );
 
+                            if (
+                                !playerSocket
+                            ) {
+                                return;
+                            }
 
-                            io.to(
-                                player.id
-                            ).emit(
-                                "private_role",
-                                info
-                            );
+                            const info =
+                                getPrivatePlayerInfo(
+                                    room.currentGame,
+                                    player.id
+                                );
 
+                            if (info) {
+                                playerSocket.emit(
+                                    "private_role",
+                                    info
+                                );
+                            }
                         }
                     );
-
                 }
 
-
-                console.log(
-                    `房间 ${room.code} 第 ${room.round} 局开始，模式: ${room.mode}`
+                io.to(room.code).emit(
+                    "room_update",
+                    getPublicRoom(room)
                 );
 
+                console.log(
+                    `下一局开始: ${room.code}, ` +
+                    `第 ${room.round} 局`
+                );
+            } catch (error) {
+                console.error(
+                    "next_round 错误:",
+                    error
+                );
 
-                // =========================
-                // 告诉房主：成功
-                // =========================
+                socket.emit(
+                    "error_message",
+                    "开始下一局失败"
+                );
+            }
+        }
+    );
 
-                if (callback) {
+    /*
+     * =========================
+     * 断开连接
+     * =========================
+     *
+     * 不立即删除玩家。
+     *
+     * 给玩家 15 秒时间刷新网页、
+     * 网络恢复或者重新连接。
+     */
+    socket.on(
+        "disconnect",
+        () => {
+            console.log(
+                "玩家断开:",
+                socket.id
+            );
 
-                    callback({
+            const roomCode =
+                socket.roomCode;
 
-                        success: true,
+            if (!roomCode) {
+                return;
+            }
 
-                        round:
-                            room.round
+            const room =
+                getRoom(roomCode);
 
-                    });
+            if (!room) {
+                return;
+            }
 
+            const playerName =
+                socket.playerName;
+
+            setTimeout(() => {
+                const currentRoom =
+                    getRoom(roomCode);
+
+                if (!currentRoom) {
+                    return;
                 }
 
-            }
-        );
+                /*
+                 * 如果玩家已经重新连接，
+                 * 新 socket ID 已经不同，
+                 * 此时不要删除。
+                 */
+                const stillSameSocket =
+                    currentRoom.players.some(
+                        player =>
+                            player.name ===
+                                playerName &&
+                            player.id ===
+                                socket.id
+                    );
 
+                if (!stillSameSocket) {
+                    return;
+                }
 
-        // =========================
-        // 玩家断开
-        // =========================
-
-        socket.on(
-            "disconnect",
-            () => {
-
-                console.log(
-                    "玩家断开:",
+                /*
+                 * 删除玩家
+                 */
+                removePlayer(
+                    currentRoom,
                     socket.id
                 );
 
-
-                const room =
-                    getRoom(
-                        socket.roomCode
-                    );
-
-
-                if (!room) return;
-
-
-                const player =
-                    room.players.find(
-                        p =>
-                            p.id ===
-                            socket.id
-                    );
-
-
-                if (!player) return;
-
-
-                const oldSocketId =
-                    socket.id;
-
-                const playerName =
-                    player.name;
-
-                const roomCode =
-                    room.code;
-
-
                 /*
-                 * 不立即删除玩家。
-                 *
-                 * 浏览器进入 BFCache、
-                 * 手机切后台、
-                 * 网络短暂断开时，
-                 * Socket.IO 可能马上重新连接。
-                 *
-                 * 给玩家15秒重新连接。
+                 * 如果房主掉线，
+                 * 可以把房主身份交给
+                 * 当前第一个玩家。
                  */
+                if (
+                    currentRoom.hostId ===
+                    socket.id
+                ) {
+                    if (
+                        currentRoom.players.length >
+                        0
+                    ) {
+                        currentRoom.hostId =
+                            currentRoom.players[0].id;
 
-                setTimeout(
-                    () => {
-
-                        const currentRoom =
-                            getRoom(
-                                roomCode
-                            );
-
-
-                        if (!currentRoom) {
-                            return;
-                        }
-
-
-                        const stillPlayer =
-                            currentRoom.players.find(
-                                p =>
-                                    p.id ===
-                                    oldSocketId
-                            );
-
-
-                        // 玩家已经通过
-                        // rejoin_room 恢复
-                        if (!stillPlayer) {
-                            return;
-                        }
-
-
-                        removePlayer(
-                            currentRoom,
-                            oldSocketId
+                        currentRoom.hostName =
+                            currentRoom.players[0].name;
+                    } else {
+                        deleteRoom(
+                            roomCode
                         );
 
+                        return;
+                    }
+                }
 
-                        console.log(
-                            `玩家 ${playerName} 确认离开房间 ${roomCode}`
-                        );
-
-
-                        // 房主离开
-
-                        if (
-                            currentRoom.hostId ===
-                            oldSocketId
-                        ) {
-
-                            if (
-                                currentRoom.players.length >
-                                0
-                            ) {
-
-                                currentRoom.hostId =
-                                    currentRoom.players[0].id;
-
-
-                                currentRoom.hostName =
-                                    currentRoom.players[0].name;
-
-                            }
-
-                        }
-
-
-                        // 房间没人了
-
-                        if (
-                            currentRoom.players.length ===
-                            0
-                        ) {
-
-                            deleteRoom(
-                                roomCode
-                            );
-
-
-                            console.log(
-                                `房间 ${roomCode} 已删除`
-                            );
-
-
-                            return;
-                        }
-
-
-                        io.to(roomCode).emit(
-                            "room_update",
-                            getPublicRoom(
-                                currentRoom
-                            )
-                        );
-
-
-                    },
-                    15000
+                io.to(roomCode).emit(
+                    "room_update",
+                    getPublicRoom(
+                        currentRoom
+                    )
                 );
 
-            }
-        );
-
-    }
-);
-
-
-// =========================
-// 启动服务器
-// =========================
-
-const PORT =
-    process.env.PORT || 3000;
-
+                console.log(
+                    `玩家移除: ${playerName}, ` +
+                    `房间: ${roomCode}`
+                );
+            }, 15000);
+        }
+    );
+});
 
 server.listen(
     PORT,
     () => {
-
         console.log(
-            "================================"
+            `服务器启动成功，端口: ${PORT}`
         );
-
-        console.log(
-            "CS2 Undercover Server"
-        );
-
-        console.log(
-            `Server Running: http://localhost:${PORT}`
-        );
-
-        console.log(
-            "================================"
-        );
-
     }
 );
