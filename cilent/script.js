@@ -1929,6 +1929,10 @@ socket.on(
 // 某些服务器版本可能发送 room_created
 // ======================================================
 
+// ======================================================
+// 创建房间成功
+// ======================================================
+
 socket.on(
     "room_created",
     data => {
@@ -1939,22 +1943,85 @@ socket.on(
         );
 
 
-        if (
-            data &&
-            data.room
-        ) {
+        if (!data) {
+
+            console.error(
+                "创建房间失败：服务器没有返回数据"
+            );
+
+            return;
+        }
+
+
+        /*
+         * 服务器当前返回的是房间对象本身：
+         *
+         * {
+         *     code,
+         *     hostId,
+         *     hostName,
+         *     mode,
+         *     state,
+         *     ...
+         * }
+         */
+
+        if (data.room) {
 
             roomData =
                 data.room;
 
+        } else {
+
+            roomData =
+                data;
+
         }
+
+
+        /*
+         * 保存房间号
+         */
+
+        if (
+            roomData &&
+            roomData.code
+        ) {
+
+            myRoomCode =
+                roomData.code;
+
+
+            localStorage.setItem(
+                "cs2_room_code",
+                roomData.code
+            );
+
+        }
+
+
+        /*
+         * 创建房间的人就是房主
+         */
+
+        console.log(
+            "创建房间成功:",
+            roomData
+        );
+
+
+        /*
+         * 进入大厅
+         */
+
+        showRoom();
 
     }
 );
 
 
 // ======================================================
-// 某些服务器版本可能发送 join_success
+// 加入房间成功
 // ======================================================
 
 socket.on(
@@ -1967,24 +2034,51 @@ socket.on(
         );
 
 
-        if (
-            data &&
-            data.room
-        ) {
+        if (!data) {
+
+            return;
+
+        }
+
+
+        if (data.room) {
 
             roomData =
                 data.room;
 
-            showRoom();
+        } else {
+
+            roomData =
+                data;
 
         }
+
+
+        if (
+            roomData &&
+            roomData.code
+        ) {
+
+            myRoomCode =
+                roomData.code;
+
+
+            localStorage.setItem(
+                "cs2_room_code",
+                roomData.code
+            );
+
+        }
+
+
+        showRoom();
 
     }
 );
 
 
 // ======================================================
-// 某些服务器版本可能发送 rejoin_success
+// 自动重连成功
 // ======================================================
 
 socket.on(
@@ -1997,13 +2091,54 @@ socket.on(
         );
 
 
-        if (
-            data &&
-            data.room
-        ) {
+        if (!data) {
+
+            return;
+
+        }
+
+
+        if (data.room) {
 
             roomData =
                 data.room;
+
+        } else {
+
+            roomData =
+                data;
+
+        }
+
+
+        if (
+            roomData &&
+            roomData.code
+        ) {
+
+            myRoomCode =
+                roomData.code;
+
+
+            localStorage.setItem(
+                "cs2_room_code",
+                roomData.code
+            );
+
+        }
+
+
+        /*
+         * 根据服务器当前状态恢复页面
+         */
+
+        if (
+            roomData &&
+            roomData.state ===
+                "WAITING"
+        ) {
+
+            showRoom();
 
         }
 
