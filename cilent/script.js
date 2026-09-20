@@ -2169,3 +2169,103 @@ function escapeHTML(
     return div.innerHTML;
 
 }
+// ======================================================
+// 主动退出房间
+// ======================================================
+
+function leaveRoom() {
+
+    if (!myRoomCode) {
+
+        alert(
+            "当前没有加入房间"
+        );
+
+        return;
+
+    }
+
+
+    if (
+        !confirm(
+            "确定要退出这个房间吗？"
+        )
+    ) {
+
+        return;
+
+    }
+
+
+    console.log(
+        "正在退出房间:",
+        myRoomCode
+    );
+
+
+    socket.emit(
+        "leave_room",
+        {},
+        result => {
+
+            console.log(
+                "退出房间服务器返回:",
+                result
+            );
+
+
+            if (
+                result &&
+                !result.success
+            ) {
+
+                alert(
+                    result.message ||
+                    "退出房间失败"
+                );
+
+                return;
+
+            }
+
+
+            /*
+             * 清除本地房间记录
+             */
+
+            localStorage.removeItem(
+                "cs2_room_code"
+            );
+
+
+            localStorage.removeItem(
+                "cs2_player_name"
+            );
+
+
+            myRoomCode =
+                null;
+
+            myPlayerName =
+                null;
+
+            roomData =
+                null;
+
+            currentGame =
+                null;
+
+            myPrivateInfo =
+                null;
+
+
+            /*
+             * 回到首页
+             */
+
+            location.reload();
+
+        }
+    );
+
+}
