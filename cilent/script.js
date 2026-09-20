@@ -3,9 +3,15 @@
 // 前端完整稳定版
 // ======================================================
 
-const socket = io(
-    "https://cs2-undercover.onrender.com"
-);
+
+// ======================================================
+// Socket.IO
+// ======================================================
+
+const socket =
+    io(
+        "https://cs2-undercover.onrender.com"
+    );
 
 
 // ======================================================
@@ -15,10 +21,14 @@ const socket = io(
 let myId = null;
 
 let myRoomCode =
-    localStorage.getItem("cs2_room_code");
+    localStorage.getItem(
+        "cs2_room_code"
+    );
 
 let myPlayerName =
-    localStorage.getItem("cs2_player_name");
+    localStorage.getItem(
+        "cs2_player_name"
+    );
 
 let roomData = null;
 
@@ -36,13 +46,19 @@ let leavingRoom = false;
 // ======================================================
 
 const lobby =
-    document.getElementById("lobby");
+    document.getElementById(
+        "lobby"
+    );
 
 const room =
-    document.getElementById("room");
+    document.getElementById(
+        "room"
+    );
 
 const game =
-    document.getElementById("game");
+    document.getElementById(
+        "game"
+    );
 
 
 // ======================================================
@@ -55,7 +71,10 @@ function isCurrentHost() {
         return false;
     }
 
-    return roomData.hostId === myId;
+    return (
+        roomData.hostId ===
+        myId
+    );
 }
 
 
@@ -110,23 +129,36 @@ function clearLoginInfo() {
 
 
 // ======================================================
-// Socket 连接
+// Socket 连接成功
 // ======================================================
 
 socket.on(
     "connect",
     () => {
 
-        myId = socket.id;
+        myId =
+            socket.id;
 
         console.log(
             "服务器连接成功:",
             myId
         );
 
+
+        /*
+         * 主动退出后不要自动重连
+         */
+
         if (leavingRoom) {
+
             return;
         }
+
+
+        /*
+         * 有保存的房间信息，
+         * 自动恢复
+         */
 
         if (
             myRoomCode &&
@@ -136,6 +168,11 @@ socket.on(
 
             reconnectToGame();
         }
+
+
+        /*
+         * 确保测试按钮存在
+         */
 
         ensureTestButtons();
     }
@@ -179,12 +216,16 @@ function reconnectToGame() {
         return;
     }
 
-    reconnecting = true;
+
+    reconnecting =
+        true;
+
 
     console.log(
         "正在自动恢复房间:",
         myRoomCode
     );
+
 
     socket.emit(
         "rejoin_room",
@@ -207,19 +248,30 @@ socket.on(
     "rejoin_success",
     data => {
 
-        reconnecting = false;
+        console.log(
+            "自动重连成功:",
+            data
+        );
+
+
+        reconnecting =
+            false;
+
 
         if (leavingRoom) {
             return;
         }
 
+
         if (!data) {
             return;
         }
 
+
         roomData =
             data.room ||
             data;
+
 
         if (
             roomData &&
@@ -231,6 +283,12 @@ socket.on(
 
             saveLoginInfo();
         }
+
+
+        /*
+         * 如果还在等待
+         * 回到房间等待界面
+         */
 
         if (
             roomData &&
@@ -252,15 +310,26 @@ socket.on(
     "rejoin_failed",
     message => {
 
-        reconnecting = false;
+        console.log(
+            "自动重连失败:",
+            message
+        );
+
+
+        reconnecting =
+            false;
+
 
         if (leavingRoom) {
             return;
         }
 
+
         clearLoginInfo();
 
+
         returnToLobby();
+
 
         alert(
             message ||
@@ -274,7 +343,9 @@ socket.on(
 // 创建正常房间
 // ======================================================
 
-function createRoom(mode) {
+function createRoom(
+    mode
+) {
 
     const nameInput =
         document.getElementById(
@@ -285,6 +356,7 @@ function createRoom(mode) {
         document.getElementById(
             "playerCountSelect"
         );
+
 
     if (
         !nameInput ||
@@ -298,13 +370,16 @@ function createRoom(mode) {
         return;
     }
 
+
     const name =
         nameInput.value.trim();
+
 
     const maxPlayers =
         Number(
             playerCountSelect.value
         );
+
 
     if (!name) {
 
@@ -316,6 +391,7 @@ function createRoom(mode) {
 
         return;
     }
+
 
     if (
         !Number.isInteger(
@@ -332,6 +408,7 @@ function createRoom(mode) {
         return;
     }
 
+
     if (!socket.connected) {
 
         alert(
@@ -341,15 +418,35 @@ function createRoom(mode) {
         return;
     }
 
-    leavingRoom = false;
+
+    leavingRoom =
+        false;
+
 
     myPlayerName =
         name;
+
 
     localStorage.setItem(
         "cs2_player_name",
         name
     );
+
+
+    console.log(
+        "创建正常房间:",
+        {
+            name:
+                name,
+
+            mode:
+                mode,
+
+            maxPlayers:
+                maxPlayers
+        }
+    );
+
 
     socket.emit(
         "create_room",
@@ -368,10 +465,12 @@ function createRoom(mode) {
 
 
 // ======================================================
-// 创建测试房间
+// 创建单人测试房间
 // ======================================================
 
-function createTestRoom(mode) {
+function createTestRoom(
+    mode
+) {
 
     const nameInput =
         document.getElementById(
@@ -382,6 +481,7 @@ function createTestRoom(mode) {
         document.getElementById(
             "playerCountSelect"
         );
+
 
     if (
         !nameInput ||
@@ -395,22 +495,32 @@ function createTestRoom(mode) {
         return;
     }
 
+
     let name =
         nameInput.value.trim();
+
 
     const maxPlayers =
         Number(
             playerCountSelect.value
         );
 
+
+    /*
+     * 测试模式没有填写昵称时
+     * 自动使用默认昵称
+     */
+
     if (!name) {
 
         name =
             "测试玩家";
 
+
         nameInput.value =
             name;
     }
+
 
     if (
         !Number.isInteger(
@@ -427,6 +537,7 @@ function createTestRoom(mode) {
         return;
     }
 
+
     if (!socket.connected) {
 
         alert(
@@ -436,15 +547,32 @@ function createTestRoom(mode) {
         return;
     }
 
-    leavingRoom = false;
+
+    leavingRoom =
+        false;
+
 
     myPlayerName =
         name;
+
 
     localStorage.setItem(
         "cs2_player_name",
         name
     );
+
+
+    console.log(
+        "创建单人测试房间:",
+        {
+            mode:
+                mode,
+
+            maxPlayers:
+                maxPlayers
+        }
+    );
+
 
     socket.emit(
         "create_test_room",
@@ -473,146 +601,211 @@ function ensureTestButtons() {
             "lobby"
         );
 
+
     if (!lobbyElement) {
+
         return;
     }
+
+
+    /*
+     * 已经存在
+     */
 
     if (
         document.getElementById(
             "singleTestButtons"
         )
     ) {
+
         return;
     }
+
 
     const panel =
         document.createElement(
             "div"
         );
 
+
     panel.id =
         "singleTestButtons";
+
 
     panel.style.marginTop =
         "20px";
 
+
     panel.style.padding =
         "16px";
+
 
     panel.style.border =
         "2px dashed #888";
 
+
     panel.style.borderRadius =
         "12px";
+
 
     panel.style.textAlign =
         "center";
 
+
+    panel.style.display =
+        "block";
+
+
+    /*
+     * 标题
+     */
 
     const title =
         document.createElement(
             "div"
         );
 
+
     title.textContent =
         "🧪 单人测试模式";
+
 
     title.style.fontSize =
         "20px";
 
+
     title.style.fontWeight =
         "bold";
 
+
     title.style.marginBottom =
         "8px";
+
 
     panel.appendChild(
         title
     );
 
 
+    /*
+     * 说明
+     */
+
     const description =
         document.createElement(
             "div"
         );
 
+
     description.textContent =
         "选择上面的游戏人数后，可以一个人自动补机器人测试";
+
 
     description.style.fontSize =
         "13px";
 
+
     description.style.opacity =
         "0.75";
 
+
     description.style.marginBottom =
         "12px";
+
 
     panel.appendChild(
         description
     );
 
 
+    /*
+     * 内鬼测试按钮
+     */
+
     const undercoverButton =
         document.createElement(
             "button"
         );
 
+
     undercoverButton.type =
         "button";
+
 
     undercoverButton.textContent =
         "🎭 单人测试 · 内鬼模式";
 
+
     undercoverButton.style.margin =
         "5px";
+
 
     undercoverButton.style.padding =
         "10px 16px";
 
+
     undercoverButton.style.cursor =
         "pointer";
 
-    undercoverButton.onclick =
+
+    undercoverButton.addEventListener(
+        "click",
         () => {
 
             createTestRoom(
                 "UNDERCOVER"
             );
-        };
+
+        }
+    );
+
 
     panel.appendChild(
         undercoverButton
     );
 
 
+    /*
+     * 分组测试按钮
+     */
+
     const teamButton =
         document.createElement(
             "button"
         );
 
+
     teamButton.type =
         "button";
+
 
     teamButton.textContent =
         "⚔️ 单人测试 · 分组模式";
 
+
     teamButton.style.margin =
         "5px";
+
 
     teamButton.style.padding =
         "10px 16px";
 
+
     teamButton.style.cursor =
         "pointer";
 
-    teamButton.onclick =
+
+    teamButton.addEventListener(
+        "click",
         () => {
 
             createTestRoom(
                 "TEAM"
             );
-        };
+
+        }
+    );
+
 
     panel.appendChild(
         teamButton
@@ -623,6 +816,7 @@ function ensureTestButtons() {
         panel
     );
 
+
     console.log(
         "✅ 单人测试按钮已经添加"
     );
@@ -630,7 +824,7 @@ function ensureTestButtons() {
 
 
 // ======================================================
-// 创建成功
+// 创建房间成功
 // ======================================================
 
 socket.on(
@@ -642,13 +836,16 @@ socket.on(
             data
         );
 
+
         if (leavingRoom) {
             return;
         }
 
+
         roomData =
             data.room ||
             data;
+
 
         if (
             !roomData ||
@@ -662,14 +859,18 @@ socket.on(
             return;
         }
 
+
         myRoomCode =
             roomData.code;
+
 
         myPlayerName =
             roomData.hostName ||
             myPlayerName;
 
+
         saveLoginInfo();
+
 
         showRoom();
     }
@@ -677,7 +878,7 @@ socket.on(
 
 
 // ======================================================
-// 显示加入房间面板
+// 显示加入房间
 // ======================================================
 
 function showJoinRoom() {
@@ -686,6 +887,7 @@ function showJoinRoom() {
         document.getElementById(
             "joinPanel"
         );
+
 
     if (joinPanel) {
 
@@ -706,10 +908,12 @@ function joinRoom() {
             "nameInput"
         );
 
+
     const roomCodeInput =
         document.getElementById(
             "roomCodeInput"
         );
+
 
     if (
         !nameInput ||
@@ -723,11 +927,14 @@ function joinRoom() {
         return;
     }
 
+
     const name =
         nameInput.value.trim();
 
+
     const code =
         roomCodeInput.value.trim();
+
 
     if (!name) {
 
@@ -740,6 +947,7 @@ function joinRoom() {
         return;
     }
 
+
     if (!code) {
 
         alert(
@@ -751,6 +959,7 @@ function joinRoom() {
         return;
     }
 
+
     if (!socket.connected) {
 
         alert(
@@ -760,15 +969,20 @@ function joinRoom() {
         return;
     }
 
-    leavingRoom = false;
+
+    leavingRoom =
+        false;
+
 
     myPlayerName =
         name;
+
 
     localStorage.setItem(
         "cs2_player_name",
         name
     );
+
 
     socket.emit(
         "join_room",
@@ -791,13 +1005,21 @@ socket.on(
     "join_success",
     data => {
 
+        console.log(
+            "加入房间成功:",
+            data
+        );
+
+
         if (leavingRoom) {
             return;
         }
 
+
         roomData =
             data.room ||
             data;
+
 
         if (
             roomData &&
@@ -810,31 +1032,38 @@ socket.on(
             saveLoginInfo();
         }
 
+
         showRoom();
     }
 );
 
 
 // ======================================================
-// 显示房间
+// 显示房间等待页面
 // ======================================================
 
 function showRoom() {
 
     if (lobby) {
+
         lobby.style.display =
             "none";
     }
 
+
     if (room) {
+
         room.style.display =
             "block";
     }
 
+
     if (game) {
+
         game.style.display =
             "none";
     }
+
 
     updateRoomUI();
 }
@@ -852,12 +1081,15 @@ socket.on(
             return;
         }
 
+
         if (!data) {
             return;
         }
 
+
         roomData =
             data;
+
 
         updateRoomUI();
     }
@@ -874,36 +1106,46 @@ function updateRoomUI() {
         return;
     }
 
+
     const roomCode =
         document.getElementById(
             "roomCode"
         );
+
 
     const roomMode =
         document.getElementById(
             "roomMode"
         );
 
+
     const playerCount =
         document.getElementById(
             "playerCount"
         );
+
 
     const maxPlayerCount =
         document.getElementById(
             "maxPlayerCount"
         );
 
+
     const playerList =
         document.getElementById(
             "playerList"
         );
+
 
     const startButton =
         document.getElementById(
             "startButton"
         );
 
+
+    /*
+     * 房间号
+     */
 
     if (roomCode) {
 
@@ -913,6 +1155,10 @@ function updateRoomUI() {
     }
 
 
+    /*
+     * 当前人数
+     */
+
     if (playerCount) {
 
         playerCount.textContent =
@@ -920,6 +1166,10 @@ function updateRoomUI() {
             0;
     }
 
+
+    /*
+     * 最大人数
+     */
 
     if (maxPlayerCount) {
 
@@ -929,6 +1179,10 @@ function updateRoomUI() {
     }
 
 
+    /*
+     * 模式
+     */
+
     if (roomMode) {
 
         let modeText =
@@ -936,6 +1190,7 @@ function updateRoomUI() {
             "TEAM"
                 ? "⚔️ 分组模式"
                 : "🎭 内鬼模式";
+
 
         if (
             roomData.isTestRoom
@@ -946,15 +1201,21 @@ function updateRoomUI() {
                 modeText;
         }
 
+
         roomMode.textContent =
             `${modeText} · ${roomData.maxPlayers}人`;
     }
 
 
+    /*
+     * 玩家列表
+     */
+
     if (playerList) {
 
         playerList.innerHTML =
             "";
+
 
         if (
             Array.isArray(
@@ -963,21 +1224,27 @@ function updateRoomUI() {
         ) {
 
             roomData.players.forEach(
-                (player, index) => {
+                (
+                    player,
+                    index
+                ) => {
 
                     const div =
                         document.createElement(
                             "div"
                         );
 
+
                     div.className =
                         "lobby-player";
+
 
                     const hostText =
                         player.id ===
                         roomData.hostId
                             ? "👑 房主"
                             : "";
+
 
                     div.innerHTML = `
                         <span>
@@ -992,6 +1259,7 @@ function updateRoomUI() {
                         </span>
                     `;
 
+
                     playerList.appendChild(
                         div
                     );
@@ -1000,6 +1268,10 @@ function updateRoomUI() {
         }
     }
 
+
+    /*
+     * 开始游戏按钮
+     */
 
     if (startButton) {
 
@@ -1011,6 +1283,7 @@ function updateRoomUI() {
                 roomData.maxPlayers
             );
 
+
         if (
             isCurrentHost() &&
             full &&
@@ -1020,6 +1293,7 @@ function updateRoomUI() {
 
             startButton.style.display =
                 "block";
+
 
             if (
                 roomData.isTestRoom
@@ -1036,6 +1310,7 @@ function updateRoomUI() {
                 startButton.textContent =
                     "🚀 开始游戏";
             }
+
 
         } else {
 
@@ -1061,9 +1336,11 @@ function startGame() {
         return;
     }
 
+
     if (!roomData) {
         return;
     }
+
 
     if (
         Number(
@@ -1081,6 +1358,7 @@ function startGame() {
         return;
     }
 
+
     if (!socket.connected) {
 
         alert(
@@ -1089,6 +1367,7 @@ function startGame() {
 
         return;
     }
+
 
     socket.emit(
         "start_game"
@@ -1109,17 +1388,24 @@ socket.on(
             data
         );
 
+
         currentGame =
             data;
 
+
         /*
          * 单人测试模式：
-         * data 里已经包含所有 Bot 的身份任务。
+         * 服务器已经把全部 Bot 的
+         * 身份和任务放进 data.players。
+         *
+         * 同时找到自己的玩家信息，
+         * 用于点击自己的卡片。
          */
 
         if (
             data &&
-            data.isTestRoom
+            data.isTestRoom ===
+                true
         ) {
 
             myPrivateInfo =
@@ -1131,9 +1417,15 @@ socket.on(
 
         } else {
 
+            /*
+             * 正常多人模式：
+             * 身份由 private_role 单独发送。
+             */
+
             myPrivateInfo =
                 null;
         }
+
 
         showGame(
             data
@@ -1143,7 +1435,7 @@ socket.on(
 
 
 // ======================================================
-// 私人身份
+// 收到私人身份
 // ======================================================
 
 socket.on(
@@ -1155,6 +1447,7 @@ socket.on(
             info
         );
 
+
         myPrivateInfo =
             info;
     }
@@ -1162,31 +1455,43 @@ socket.on(
 
 
 // ======================================================
-// 显示游戏
+// 显示游戏页面
 // ======================================================
 
-function showGame(data) {
+function showGame(
+    data
+) {
 
     if (lobby) {
+
         lobby.style.display =
             "none";
     }
 
+
     if (room) {
+
         room.style.display =
             "none";
     }
 
+
     if (game) {
+
         game.style.display =
             "block";
     }
 
 
+    /*
+     * 第几局
+     */
+
     const roundNumber =
         document.getElementById(
             "roundNumber"
         );
+
 
     if (roundNumber) {
 
@@ -1195,10 +1500,15 @@ function showGame(data) {
     }
 
 
+    /*
+     * 游戏提示
+     */
+
     const notice =
         document.getElementById(
             "gameNotice"
         );
+
 
     if (notice) {
 
@@ -1212,13 +1522,15 @@ function showGame(data) {
                     data.players.length
                 );
 
+
             notice.textContent =
                 `⚔️ 第 ${data.round} 局分组模式：${counts.ct} CT vs ${counts.t} T`;
 
         } else {
 
             if (
-                data.isTestRoom
+                data.isTestRoom ===
+                true
             ) {
 
                 notice.textContent =
@@ -1238,6 +1550,7 @@ function showGame(data) {
             "players"
         );
 
+
     if (!container) {
         return;
     }
@@ -1247,47 +1560,290 @@ function showGame(data) {
         "";
 
 
-    data.players.forEach(
-        player => {
+    /*
+     * ==================================================
+     * 按阵营分开
+     *
+     * CT 第一排
+     * T 第二排
+     * ==================================================
+     */
 
-            const card =
-                document.createElement(
-                    "div"
-                );
-
-            card.className =
-                "player-card";
-
-            card.dataset.playerId =
-                player.id;
-
-
-            const isMe =
-                player.id ===
-                myId;
+    const ctPlayers =
+        data.players.filter(
+            player =>
+                player.team ===
+                "CT"
+        );
 
 
-            /*
-             * ==================================================
-             * 单人测试模式
-             *
-             * 所有玩家都可以点击。
-             *
-             * 包括：
-             * 自己
-             * Bot
-             *
-             * 点击以后显示：
-             * 阵营
-             * 身份
-             * 任务
-             * ==================================================
-             */
+    const tPlayers =
+        data.players.filter(
+            player =>
+                player.team ===
+                "T"
+        );
 
-            if (
-                data.isTestRoom ===
-                true
-            ) {
+
+    /*
+     * ==================================================
+     * 创建一排
+     * ==================================================
+     */
+
+    function createTeamRow(
+        players,
+        teamName
+    ) {
+
+        const section =
+            document.createElement(
+                "div"
+            );
+
+
+        section.className =
+            "team-section";
+
+
+        section.style.width =
+            "100%";
+
+
+        section.style.marginBottom =
+            "24px";
+
+
+        /*
+         * 阵营标题
+         */
+
+        const title =
+            document.createElement(
+                "div"
+            );
+
+
+        title.className =
+            "team-section-title";
+
+
+        title.style.width =
+            "100%";
+
+
+        title.style.textAlign =
+            "center";
+
+
+        title.style.fontSize =
+            "20px";
+
+
+        title.style.fontWeight =
+            "bold";
+
+
+        title.style.marginBottom =
+            "12px";
+
+
+        title.textContent =
+            teamName ===
+                "CT"
+                ? `🔵 CT（${players.length}人）`
+                : `🟠 T（${players.length}人）`;
+
+
+        section.appendChild(
+            title
+        );
+
+
+        /*
+         * 玩家卡区域
+         */
+
+        const row =
+            document.createElement(
+                "div"
+            );
+
+
+        row.className =
+            "team-player-row";
+
+
+        row.style.width =
+            "100%";
+
+
+        row.style.display =
+            "grid";
+
+
+        row.style.gridTemplateColumns =
+            `repeat(${Math.max(
+                players.length,
+                1
+            )}, minmax(0, 1fr))`;
+
+
+        row.style.gap =
+            "16px";
+
+
+        row.style.alignItems =
+            "stretch";
+
+
+        /*
+         * 玩家卡
+         */
+
+        players.forEach(
+            player => {
+
+                const card =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                card.className =
+                    "player-card";
+
+
+                card.dataset.playerId =
+                    player.id;
+
+
+                const isMe =
+                    player.id ===
+                    myId;
+
+
+                /*
+                 * ==========================================
+                 * 单人测试模式
+                 *
+                 * 自己和所有 Bot 都可以点击。
+                 * ==========================================
+                 */
+
+                if (
+                    data.isTestRoom ===
+                    true
+                ) {
+
+                    card.innerHTML = `
+                        <div class="card-hidden">
+
+                            <div class="player-name">
+                                ${escapeHTML(
+                                    player.name
+                                )}
+                            </div>
+
+                            <div class="team-text">
+                                ${
+                                    player.team ===
+                                    "CT"
+                                        ? "🔵 CT"
+                                        : "🟠 T"
+                                }
+                            </div>
+
+                            <div class="click-text">
+                                👁️ 点击查看身份和任务
+                            </div>
+
+                        </div>
+                    `;
+
+
+                    card.style.cursor =
+                        "pointer";
+
+
+                    /*
+                     * 把这个玩家的数据保存在卡片上。
+                     */
+
+                    card._testPlayer =
+                        player;
+
+
+                    card.onclick =
+                        () => {
+
+                            toggleTestPlayerCard(
+                                card
+                            );
+
+                        };
+
+
+                    row.appendChild(
+                        card
+                    );
+
+
+                    return;
+                }
+
+
+                /*
+                 * ==========================================
+                 * 普通分组模式
+                 *
+                 * 不显示身份和任务。
+                 * ==========================================
+                 */
+
+                if (
+                    data.mode ===
+                    "TEAM"
+                ) {
+
+                    card.innerHTML = `
+                        <div class="card-visible">
+
+                            <div class="player-name">
+                                ${escapeHTML(
+                                    player.name
+                                )}
+                            </div>
+
+                            <div class="team-text">
+                                ${
+                                    player.team ===
+                                    "CT"
+                                        ? "🔵 CT"
+                                        : "🟠 T"
+                                }
+                            </div>
+
+                        </div>
+                    `;
+
+
+                    row.appendChild(
+                        card
+                    );
+
+
+                    return;
+                }
+
+
+                /*
+                 * ==========================================
+                 * 正常内鬼模式
+                 *
+                 * 只有自己可以点击。
+                 * ==========================================
+                 */
 
                 card.innerHTML = `
                     <div class="card-hidden">
@@ -1308,69 +1864,10 @@ function showGame(data) {
                         </div>
 
                         <div class="click-text">
-                            👁️ 点击查看身份和任务
-                        </div>
-
-                    </div>
-                `;
-
-
-                card.style.cursor =
-                    "pointer";
-
-
-                /*
-                 * 把玩家数据直接保存到卡片。
-                 */
-
-                card._testPlayer =
-                    player;
-
-
-                card.onclick =
-                    () => {
-
-                        toggleTestPlayerCard(
-                            card
-                        );
-                    };
-
-
-                container.appendChild(
-                    card
-                );
-
-
-                return;
-            }
-
-
-            /*
-             * ==================================================
-             * 正常分组模式
-             * ==================================================
-             */
-
-            if (
-                data.mode ===
-                "TEAM"
-            ) {
-
-                card.innerHTML = `
-                    <div class="card-visible">
-
-                        <div class="player-name">
-                            ${escapeHTML(
-                                player.name
-                            )}
-                        </div>
-
-                        <div class="team-text">
                             ${
-                                player.team ===
-                                "CT"
-                                    ? "🔵 CT"
-                                    : "🟠 T"
+                                isMe
+                                    ? "👁️ 点击查看身份"
+                                    : "👤"
                             }
                         </div>
 
@@ -1378,82 +1875,96 @@ function showGame(data) {
                 `;
 
 
-                container.appendChild(
+                if (isMe) {
+
+                    card.style.cursor =
+                        "pointer";
+
+
+                    card.onclick =
+                        () => {
+
+                            toggleMyCard(
+                                card
+                            );
+
+                        };
+                }
+
+
+                row.appendChild(
                     card
                 );
 
-
-                return;
             }
+        );
 
 
-            /*
-             * ==================================================
-             * 正常多人内鬼模式
-             *
-             * 只有自己可以点击。
-             * ==================================================
-             */
-
-            card.innerHTML = `
-                <div class="card-hidden">
-
-                    <div class="player-name">
-                        ${escapeHTML(
-                            player.name
-                        )}
-                    </div>
-
-                    <div class="team-text">
-                        ${
-                            player.team ===
-                            "CT"
-                                ? "🔵 CT"
-                                : "🟠 T"
-                        }
-                    </div>
-
-                    <div class="click-text">
-                        ${
-                            isMe
-                                ? "👁️ 点击查看身份"
-                                : "👤"
-                        }
-                    </div>
-
-                </div>
-            `;
+        section.appendChild(
+            row
+        );
 
 
-            if (isMe) {
-
-                card.style.cursor =
-                    "pointer";
+        return section;
+    }
 
 
-                card.onclick =
-                    () => {
+    /*
+     * ==================================================
+     * CT 第一排
+     * ==================================================
+     */
 
-                        toggleMyCard(
-                            card
-                        );
-                    };
-            }
+    if (
+        ctPlayers.length > 0
+    ) {
 
-
-            container.appendChild(
-                card
+        const ctSection =
+            createTeamRow(
+                ctPlayers,
+                "CT"
             );
-        }
-    );
 
+
+        container.appendChild(
+            ctSection
+        );
+    }
+
+
+    /*
+     * ==================================================
+     * T 第二排
+     * ==================================================
+     */
+
+    if (
+        tPlayers.length > 0
+    ) {
+
+        const tSection =
+            createTeamRow(
+                tPlayers,
+                "T"
+            );
+
+
+        container.appendChild(
+            tSection
+        );
+    }
+
+
+    /*
+     * 游戏控制
+     */
 
     addGameControlButtons();
 }
 
 
 // ======================================================
-// 单人测试模式：切换任意玩家身份
+// 单人测试：查看任意玩家
 // ======================================================
 
 function toggleTestPlayerCard(
@@ -1468,6 +1979,11 @@ function toggleTestPlayerCard(
         return;
     }
 
+
+    /*
+     * 如果已经显示，
+     * 再次点击则隐藏。
+     */
 
     if (
         card.classList.contains(
@@ -1509,6 +2025,10 @@ function toggleTestPlayerCard(
         return;
     }
 
+
+    /*
+     * 显示
+     */
 
     card.classList.add(
         "revealed"
@@ -1602,6 +2122,7 @@ function addGameControlButtons() {
             "players"
         );
 
+
     if (!container) {
         return;
     }
@@ -1612,7 +2133,9 @@ function addGameControlButtons() {
             "gameControlButtons"
         );
 
+
     if (old) {
+
         old.remove();
     }
 
@@ -1622,17 +2145,18 @@ function addGameControlButtons() {
             "div"
         );
 
+
     controls.id =
         "gameControlButtons";
 
-    controls.style.gridColumn =
-        "1 / -1";
 
     controls.style.width =
         "100%";
 
+
     controls.style.textAlign =
         "center";
+
 
     controls.style.marginTop =
         "20px";
@@ -1657,14 +2181,21 @@ function addGameControlButtons() {
                     "button"
                 );
 
+
+            finishButton.type =
+                "button";
+
+
             finishButton.textContent =
                 "🏁 结束本局";
+
 
             finishButton.onclick =
                 () => {
 
                     finishGame();
                 };
+
 
             controls.appendChild(
                 finishButton
@@ -1674,7 +2205,7 @@ function addGameControlButtons() {
 
 
     /*
-     * 揭晓阶段
+     * 游戏结束
      */
 
     if (
@@ -1692,14 +2223,21 @@ function addGameControlButtons() {
                     "button"
                 );
 
+
+            nextButton.type =
+                "button";
+
+
             nextButton.textContent =
                 "🔄 开始下一局";
+
 
             nextButton.onclick =
                 () => {
 
                     nextRound();
                 };
+
 
             controls.appendChild(
                 nextButton
@@ -1712,8 +2250,14 @@ function addGameControlButtons() {
                     "div"
                 );
 
+
             waiting.textContent =
                 "等待房主开始下一局...";
+
+
+            waiting.style.margin =
+                "10px";
+
 
             controls.appendChild(
                 waiting
@@ -1731,17 +2275,25 @@ function addGameControlButtons() {
             "button"
         );
 
+
+    backButton.type =
+        "button";
+
+
     backButton.textContent =
         "🚪 退出房间";
 
+
     backButton.style.marginLeft =
         "10px";
+
 
     backButton.onclick =
         () => {
 
             leaveRoom();
         };
+
 
     controls.appendChild(
         backButton
@@ -1755,7 +2307,7 @@ function addGameControlButtons() {
 
 
 // ======================================================
-// 请求私人身份
+// 请求自己的私人身份
 // ======================================================
 
 function requestMyPrivateInfo() {
@@ -1769,6 +2321,7 @@ function requestMyPrivateInfo() {
         return;
     }
 
+
     socket.emit(
         "request_private_role"
     );
@@ -1776,7 +2329,7 @@ function requestMyPrivateInfo() {
 
 
 // ======================================================
-// 正常模式：切换自己的身份卡
+// 正常模式：点击自己的卡
 // ======================================================
 
 function toggleMyCard(
@@ -1947,6 +2500,16 @@ function finishGame() {
     }
 
 
+    if (!socket.connected) {
+
+        alert(
+            "服务器连接已经断开"
+        );
+
+        return;
+    }
+
+
     socket.emit(
         "finish_game"
     );
@@ -1966,11 +2529,14 @@ socket.on(
             data
         );
 
+
         currentGame =
             data;
 
+
         myPrivateInfo =
             null;
+
 
         showFinalResult(
             data
@@ -1980,7 +2546,7 @@ socket.on(
 
 
 // ======================================================
-// 最终结果
+// 显示最终结果
 // ======================================================
 
 function showFinalResult(
@@ -1993,11 +2559,13 @@ function showFinalResult(
             "none";
     }
 
+
     if (room) {
 
         room.style.display =
             "none";
     }
+
 
     if (game) {
 
@@ -2011,6 +2579,7 @@ function showFinalResult(
             "roundNumber"
         );
 
+
     if (roundNumber) {
 
         roundNumber.textContent =
@@ -2022,6 +2591,7 @@ function showFinalResult(
         document.getElementById(
             "gameNotice"
         );
+
 
     if (notice) {
 
@@ -2046,6 +2616,7 @@ function showFinalResult(
             "players"
         );
 
+
     if (!container) {
         return;
     }
@@ -2055,90 +2626,240 @@ function showFinalResult(
         "";
 
 
-    data.players.forEach(
-        player => {
+    /*
+     * 最终结果同样按 CT / T 两排。
+     */
 
-            const card =
-                document.createElement(
-                    "div"
-                );
-
-            card.className =
-                "final-player";
-
-
-            if (
-                data.mode ===
-                "TEAM"
-            ) {
-
-                card.innerHTML = `
-                    <strong>
-                        ${escapeHTML(
-                            player.name
-                        )}
-                    </strong>
-
-                    <span>
-                        ${
-                            player.team ===
-                            "CT"
-                                ? "🔵 CT"
-                                : "🟠 T"
-                        }
-                    </span>
-                `;
-
-            } else {
-
-                const roleText =
-                    player.role ===
-                    "SPY"
-                        ? "🕵️ 内鬼"
-                        : "🛡️ 好人";
+    const ctPlayers =
+        data.players.filter(
+            player =>
+                player.team ===
+                "CT"
+        );
 
 
-                card.innerHTML = `
-                    <strong>
-                        ${escapeHTML(
-                            player.name
-                        )}
-                    </strong>
-
-                    <span>
-                        ${
-                            player.team ===
-                            "CT"
-                                ? "🔵 CT"
-                                : "🟠 T"
-                        }
-                    </span>
-
-                    <span>
-                        ${roleText}
-                    </span>
-
-                    ${
-                        player.task
-                            ? `
-                                <div class="final-task">
-                                    🎯
-                                    ${escapeHTML(
-                                        player.task
-                                    )}
-                                </div>
-                            `
-                            : ""
-                    }
-                `;
-            }
+    const tPlayers =
+        data.players.filter(
+            player =>
+                player.team ===
+                "T"
+        );
 
 
-            container.appendChild(
-                card
+    /*
+     * 创建最终结果排
+     */
+
+    function createFinalRow(
+        players,
+        teamName
+    ) {
+
+        const section =
+            document.createElement(
+                "div"
             );
-        }
-    );
+
+
+        section.style.width =
+            "100%";
+
+
+        section.style.marginBottom =
+            "24px";
+
+
+        const title =
+            document.createElement(
+                "div"
+            );
+
+
+        title.style.width =
+            "100%";
+
+
+        title.style.textAlign =
+            "center";
+
+
+        title.style.fontSize =
+            "20px";
+
+
+        title.style.fontWeight =
+            "bold";
+
+
+        title.style.marginBottom =
+            "12px";
+
+
+        title.textContent =
+            teamName ===
+                "CT"
+                ? `🔵 CT（${players.length}人）`
+                : `🟠 T（${players.length}人）`;
+
+
+        section.appendChild(
+            title
+        );
+
+
+        const row =
+            document.createElement(
+                "div"
+            );
+
+
+        row.style.width =
+            "100%";
+
+
+        row.style.display =
+            "grid";
+
+
+        row.style.gridTemplateColumns =
+            `repeat(${Math.max(
+                players.length,
+                1
+            )}, minmax(0, 1fr))`;
+
+
+        row.style.gap =
+            "16px";
+
+
+        players.forEach(
+            player => {
+
+                const card =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                card.className =
+                    "final-player";
+
+
+                if (
+                    data.mode ===
+                    "TEAM"
+                ) {
+
+                    card.innerHTML = `
+                        <strong>
+                            ${escapeHTML(
+                                player.name
+                            )}
+                        </strong>
+
+                        <span>
+                            ${
+                                player.team ===
+                                "CT"
+                                    ? "🔵 CT"
+                                    : "🟠 T"
+                            }
+                        </span>
+                    `;
+
+                } else {
+
+                    const roleText =
+                        player.role ===
+                        "SPY"
+                            ? "🕵️ 内鬼"
+                            : "🛡️ 好人";
+
+
+                    card.innerHTML = `
+                        <strong>
+                            ${escapeHTML(
+                                player.name
+                            )}
+                        </strong>
+
+                        <span>
+                            ${
+                                player.team ===
+                                "CT"
+                                    ? "🔵 CT"
+                                    : "🟠 T"
+                            }
+                        </span>
+
+                        <span>
+                            ${roleText}
+                        </span>
+
+                        ${
+                            player.task
+                                ? `
+                                    <div class="final-task">
+                                        🎯
+                                        ${escapeHTML(
+                                            player.task
+                                        )}
+                                    </div>
+                                `
+                                : ""
+                        }
+                    `;
+                }
+
+
+                row.appendChild(
+                    card
+                );
+            }
+        );
+
+
+        section.appendChild(
+            row
+        );
+
+
+        return section;
+    }
+
+
+    /*
+     * CT 第一排
+     */
+
+    if (
+        ctPlayers.length > 0
+    ) {
+
+        container.appendChild(
+            createFinalRow(
+                ctPlayers,
+                "CT"
+            )
+        );
+    }
+
+
+    /*
+     * T 第二排
+     */
+
+    if (
+        tPlayers.length > 0
+    ) {
+
+        container.appendChild(
+            createFinalRow(
+                tPlayers,
+                "T"
+            )
+        );
+    }
 
 
     addGameControlButtons();
@@ -2166,6 +2887,16 @@ function nextRound() {
     }
 
 
+    if (!socket.connected) {
+
+        alert(
+            "服务器连接已经断开"
+        );
+
+        return;
+    }
+
+
     socket.emit(
         "next_round"
     );
@@ -2184,6 +2915,7 @@ socket.on(
             return;
         }
 
+
         alert(
             message
         );
@@ -2192,10 +2924,15 @@ socket.on(
 
 
 // ======================================================
-// 退出房间
+// 主动退出房间
 // ======================================================
 
 function leaveRoom() {
+
+    console.log(
+        "leaveRoom() 被调用"
+    );
+
 
     if (leavingRoom) {
         return;
@@ -2213,12 +2950,23 @@ function leaveRoom() {
     }
 
 
+    /*
+     * 开始退出
+     */
+
     leavingRoom =
         true;
+
 
     reconnecting =
         false;
 
+
+    /*
+     * 通知服务器
+     *
+     * 不等待 callback
+     */
 
     if (
         socket &&
@@ -2231,7 +2979,16 @@ function leaveRoom() {
     }
 
 
+    /*
+     * 清除本地信息
+     */
+
     clearLoginInfo();
+
+
+    /*
+     * 立即回主界面
+     */
 
     returnToLobby();
 }
@@ -2249,11 +3006,13 @@ function returnToLobby() {
             "none";
     }
 
+
     if (room) {
 
         room.style.display =
             "none";
     }
+
 
     if (lobby) {
 
@@ -2267,6 +3026,7 @@ function returnToLobby() {
             "roomCode"
         );
 
+
     if (roomCodeElement) {
 
         roomCodeElement.textContent =
@@ -2278,6 +3038,7 @@ function returnToLobby() {
         document.getElementById(
             "roomMode"
         );
+
 
     if (roomModeElement) {
 
@@ -2291,6 +3052,7 @@ function returnToLobby() {
             "playerList"
         );
 
+
     if (playerListElement) {
 
         playerListElement.innerHTML =
@@ -2302,6 +3064,7 @@ function returnToLobby() {
         document.getElementById(
             "playerCount"
         );
+
 
     if (playerCountElement) {
 
@@ -2315,6 +3078,7 @@ function returnToLobby() {
             "maxPlayerCount"
         );
 
+
     if (maxPlayerCountElement) {
 
         maxPlayerCountElement.textContent =
@@ -2326,6 +3090,7 @@ function returnToLobby() {
         document.getElementById(
             "startButton"
         );
+
 
     if (startButton) {
 
@@ -2339,6 +3104,7 @@ function returnToLobby() {
             "roomCodeInput"
         );
 
+
     if (roomCodeInput) {
 
         roomCodeInput.value =
@@ -2350,6 +3116,7 @@ function returnToLobby() {
         document.getElementById(
             "nameInput"
         );
+
 
     if (nameInput) {
 
@@ -2363,12 +3130,17 @@ function returnToLobby() {
             "joinPanel"
         );
 
+
     if (joinPanel) {
 
         joinPanel.style.display =
             "none";
     }
 
+
+    /*
+     * 退出后允许重新进入新的房间
+     */
 
     setTimeout(
         () => {
@@ -2386,7 +3158,7 @@ function returnToLobby() {
 
 
 // ======================================================
-// HTML 防注入
+// HTML 转义
 // ======================================================
 
 function escapeHTML(
@@ -2398,10 +3170,12 @@ function escapeHTML(
             "div"
         );
 
+
     div.textContent =
         text == null
             ? ""
             : String(text);
+
 
     return div.innerHTML;
 }
