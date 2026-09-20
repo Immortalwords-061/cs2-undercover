@@ -1,6 +1,6 @@
 // ======================================================
 // CS2 内鬼模式 / 分组模式
-// 最终版前端 script.js
+// 前端最终版 script.js
 // ======================================================
 
 
@@ -80,7 +80,7 @@ function isCurrentHost() {
 
 
 // ======================================================
-// 保存本地登录信息
+// 保存登录信息
 // ======================================================
 
 function saveLoginInfo() {
@@ -102,11 +102,12 @@ function saveLoginInfo() {
         );
 
     }
+
 }
 
 
 // ======================================================
-// 清除本地登录信息
+// 清除登录信息
 // ======================================================
 
 function clearLoginInfo() {
@@ -128,6 +129,7 @@ function clearLoginInfo() {
     currentGame = null;
 
     myPrivateInfo = null;
+
 }
 
 
@@ -150,8 +152,9 @@ socket.on(
 
         /*
          * 如果浏览器之前有房间记录，
-         * 自动尝试恢复。
+         * 自动恢复。
          */
+
         if (
             myRoomCode &&
             myPlayerName &&
@@ -198,13 +201,16 @@ function reconnectToGame() {
 
     }
 
+
     if (reconnecting) {
 
         return;
 
     }
 
+
     reconnecting = true;
+
 
     console.log(
         "正在自动恢复游戏..."
@@ -219,65 +225,6 @@ function reconnectToGame() {
 
             name:
                 myPlayerName
-        },
-        result => {
-
-            reconnecting = false;
-
-
-            if (
-                !result ||
-                !result.success
-            ) {
-
-                console.log(
-                    "自动恢复失败:",
-                    result
-                );
-
-                return;
-
-            }
-
-
-            console.log(
-                "自动恢复成功:",
-                result
-            );
-
-
-            roomData =
-                result.room;
-
-
-            /*
-             * 服务器返回新的 socket.id，
-             * 这里直接根据房间数据判断房主。
-             */
-
-            if (
-                roomData.state ===
-                "WAITING"
-            ) {
-
-                showRoom();
-
-                return;
-
-            }
-
-
-            /*
-             * PLAYING / REVEAL
-             *
-             * 最新服务器会继续发送：
-             *
-             * game_started
-             * 或
-             * game_finished
-             *
-             */
-
         }
     );
 
@@ -290,6 +237,12 @@ function reconnectToGame() {
 
 function createRoom(mode) {
 
+    console.log(
+        "点击创建房间:",
+        mode
+    );
+
+
     const nameInput =
         document.getElementById(
             "nameInput"
@@ -301,6 +254,28 @@ function createRoom(mode) {
         );
 
 
+    if (!nameInput) {
+
+        console.error(
+            "找不到 nameInput"
+        );
+
+        return;
+
+    }
+
+
+    if (!playerCountSelect) {
+
+        console.error(
+            "找不到 playerCountSelect"
+        );
+
+        return;
+
+    }
+
+
     const name =
         nameInput.value.trim();
 
@@ -310,6 +285,8 @@ function createRoom(mode) {
         alert(
             "请输入你的昵称"
         );
+
+        nameInput.focus();
 
         return;
 
@@ -343,15 +320,30 @@ function createRoom(mode) {
         name;
 
 
-    saveLoginInfo();
+    /*
+     * 这里只保存昵称。
+     *
+     * 房间号要等服务器真正创建成功
+     * 后再保存。
+     */
+
+    localStorage.setItem(
+        "cs2_player_name",
+        myPlayerName
+    );
 
 
     console.log(
-        "创建房间:",
+        "发送创建房间:",
         {
-            name,
-            mode,
-            maxPlayers
+            name:
+                name,
+
+            mode:
+                mode,
+
+            maxPlayers:
+                maxPlayers
         }
     );
 
@@ -367,48 +359,95 @@ function createRoom(mode) {
 
             maxPlayers:
                 maxPlayers
-
-        },
-        result => {
-
-            console.log(
-                "创建房间返回:",
-                result
-            );
-
-
-            if (
-                !result ||
-                !result.success
-            ) {
-
-                alert(
-                    result?.message ||
-                    "创建房间失败"
-                );
-
-                return;
-
-            }
-
-
-            myRoomCode =
-                result.roomCode;
-
-
-            roomData =
-                result.room;
-
-
-            saveLoginInfo();
-
-
-            showRoom();
-
         }
     );
 
 }
+
+
+// ======================================================
+// 创建房间成功
+// ======================================================
+
+socket.on(
+    "room_created",
+    data => {
+
+        console.log(
+            "收到 room_created:",
+            data
+        );
+
+
+        if (!data) {
+
+            alert(
+                "创建房间失败：服务器没有返回房间信息"
+            );
+
+            return;
+
+        }
+
+
+        /*
+         * 当前后端直接发送房间对象。
+         */
+
+        if (data.room) {
+
+            roomData =
+                data.room;
+
+        } else {
+
+            roomData =
+                data;
+
+        }
+
+
+        if (
+            !roomData ||
+            !roomData.code
+        ) {
+
+            console.error(
+                "room_created 数据异常:",
+                data
+            );
+
+            alert(
+                "创建房间失败：房间数据异常"
+            );
+
+            return;
+
+        }
+
+
+        myRoomCode =
+            roomData.code;
+
+
+        myPlayerName =
+            roomData.hostName ||
+            myPlayerName;
+
+
+        saveLoginInfo();
+
+
+        console.log(
+            "创建房间成功:",
+            roomData
+        );
+
+
+        showRoom();
+
+    }
+);
 
 
 // ======================================================
@@ -421,6 +460,7 @@ function showJoinRoom() {
         document.getElementById(
             "joinPanel"
         );
+
 
     if (joinPanel) {
 
@@ -438,22 +478,34 @@ function showJoinRoom() {
 
 function joinRoom() {
 
+    const nameInput =
+        document.getElementById(
+            "nameInput"
+        );
+
+    const roomCodeInput =
+        document.getElementById(
+            "roomCodeInput"
+        );
+
+
+    if (!nameInput || !roomCodeInput) {
+
+        console.error(
+            "找不到加入房间输入框"
+        );
+
+        return;
+
+    }
+
+
     const name =
-        document
-            .getElementById(
-                "nameInput"
-            )
-            .value
-            .trim();
+        nameInput.value.trim();
 
 
     const code =
-        document
-            .getElementById(
-                "roomCodeInput"
-            )
-            .value
-            .trim();
+        roomCodeInput.value.trim();
 
 
     if (!name) {
@@ -461,6 +513,8 @@ function joinRoom() {
         alert(
             "请输入你的昵称"
         );
+
+        nameInput.focus();
 
         return;
 
@@ -473,6 +527,8 @@ function joinRoom() {
             "请输入房间号"
         );
 
+        roomCodeInput.focus();
+
         return;
 
     }
@@ -482,57 +538,100 @@ function joinRoom() {
         name;
 
 
-    socket.emit(
-        "join_room",
+    localStorage.setItem(
+        "cs2_player_name",
+        myPlayerName
+    );
+
+
+    console.log(
+        "发送加入房间:",
         {
-            code:
+            roomCode:
                 code,
 
             name:
                 name
-
-        },
-        result => {
-
-            console.log(
-                "加入房间返回:",
-                result
-            );
+        }
+    );
 
 
-            if (
-                !result ||
-                !result.success
-            ) {
+    /*
+     * 注意：
+     *
+     * 后端要求 roomCode
+     * 不是 code。
+     */
 
-                alert(
-                    result?.message ||
-                    "加入房间失败"
-                );
+    socket.emit(
+        "join_room",
+        {
+            roomCode:
+                code,
 
-                return;
-
-            }
-
-
-            myRoomCode =
-                result.roomCode ||
-                code;
-
-
-            roomData =
-                result.room;
-
-
-            saveLoginInfo();
-
-
-            showRoom();
-
+            name:
+                name
         }
     );
 
 }
+
+
+// ======================================================
+// 加入房间成功
+// ======================================================
+
+socket.on(
+    "join_success",
+    data => {
+
+        console.log(
+            "收到 join_success:",
+            data
+        );
+
+
+        if (!data) {
+
+            alert(
+                "加入房间失败：服务器没有返回数据"
+            );
+
+            return;
+
+        }
+
+
+        if (data.room) {
+
+            roomData =
+                data.room;
+
+        } else {
+
+            roomData =
+                data;
+
+        }
+
+
+        if (
+            roomData &&
+            roomData.code
+        ) {
+
+            myRoomCode =
+                roomData.code;
+
+            saveLoginInfo();
+
+        }
+
+
+        showRoom();
+
+    }
+);
 
 
 // ======================================================
@@ -541,14 +640,28 @@ function joinRoom() {
 
 function showRoom() {
 
-    lobby.style.display =
-        "none";
+    if (lobby) {
 
-    room.style.display =
-        "block";
+        lobby.style.display =
+            "none";
 
-    game.style.display =
-        "none";
+    }
+
+
+    if (room) {
+
+        room.style.display =
+            "block";
+
+    }
+
+
+    if (game) {
+
+        game.style.display =
+            "none";
+
+    }
 
 
     updateRoomUI();
@@ -570,17 +683,46 @@ socket.on(
         );
 
 
+        if (!data) {
+
+            return;
+
+        }
+
+
         roomData =
             data;
 
 
-        updateRoomUI();
-
-
         /*
-         * 如果当前已经在游戏页面，
-         * 不强制切回大厅。
+         * 如果服务器告诉我们
+         * 当前玩家已经不在房间里，
+         * 就不要继续显示房间。
          */
+
+        const me =
+            roomData.players &&
+            roomData.players.find(
+                player =>
+                    player.id ===
+                    myId
+            );
+
+
+        if (
+            roomData.players &&
+            roomData.players.length > 0 &&
+            !me
+        ) {
+
+            console.log(
+                "当前玩家已经不在这个房间"
+            );
+
+        }
+
+
+        updateRoomUI();
 
     }
 );
@@ -630,26 +772,41 @@ function updateRoomUI() {
         );
 
 
+    /*
+     * 房间号
+     */
+
     if (roomCode) {
 
         roomCode.textContent =
-            roomData.code;
+            roomData.code ||
+            "------";
 
     }
 
+
+    /*
+     * 当前人数
+     */
 
     if (playerCount) {
 
         playerCount.textContent =
-            roomData.playerCount;
+            roomData.playerCount ||
+            0;
 
     }
 
 
+    /*
+     * 最大人数
+     */
+
     if (maxPlayerCount) {
 
         maxPlayerCount.textContent =
-            roomData.maxPlayers;
+            roomData.maxPlayers ||
+            10;
 
     }
 
@@ -688,46 +845,54 @@ function updateRoomUI() {
             "";
 
 
-        roomData.players.forEach(
-            (player, index) => {
+        if (
+            Array.isArray(
+                roomData.players
+            )
+        ) {
 
-                const div =
-                    document.createElement(
-                        "div"
+            roomData.players.forEach(
+                (player, index) => {
+
+                    const div =
+                        document.createElement(
+                            "div"
+                        );
+
+
+                    div.className =
+                        "lobby-player";
+
+
+                    const hostText =
+                        player.id ===
+                        roomData.hostId
+                            ? "👑 房主"
+                            : "";
+
+
+                    div.innerHTML = `
+                        <span>
+                            ${index + 1}.
+                            ${escapeHTML(
+                                player.name
+                            )}
+                        </span>
+
+                        <span>
+                            ${hostText}
+                        </span>
+                    `;
+
+
+                    playerList.appendChild(
+                        div
                     );
 
+                }
+            );
 
-                div.className =
-                    "lobby-player";
-
-
-                const hostText =
-                    player.id ===
-                    roomData.hostId
-                        ? "👑 房主"
-                        : "";
-
-
-                div.innerHTML = `
-                    <span>
-                        ${index + 1}.
-                        ${escapeHTML(
-                            player.name
-                        )}
-                    </span>
-
-                    <span>
-                        ${hostText}
-                    </span>
-                `;
-
-
-                playerList.appendChild(
-                    div
-                );
-
-            }
-        );
+        }
 
     }
 
@@ -741,9 +906,15 @@ function updateRoomUI() {
         const host =
             isCurrentHost();
 
+
         const full =
-            roomData.playerCount ===
-            roomData.maxPlayers;
+            Number(
+                roomData.playerCount
+            ) ===
+            Number(
+                roomData.maxPlayers
+            );
+
 
         const waiting =
             roomData.state ===
@@ -793,9 +964,7 @@ function updateRoomUI() {
 
 function startGame() {
 
-    if (
-        !isCurrentHost()
-    ) {
+    if (!isCurrentHost()) {
 
         alert(
             "只有房主可以开始游戏"
@@ -814,12 +983,27 @@ function startGame() {
 
 
     if (
-        roomData.playerCount !==
-        roomData.maxPlayers
+        Number(
+            roomData.playerCount
+        ) !==
+        Number(
+            roomData.maxPlayers
+        )
     ) {
 
         alert(
             `需要正好 ${roomData.maxPlayers} 人才能开始`
+        );
+
+        return;
+
+    }
+
+
+    if (!socket.connected) {
+
+        alert(
+            "服务器连接已经断开，请稍等后再试"
         );
 
         return;
@@ -848,46 +1032,19 @@ socket.on(
         );
 
 
+        if (!data) {
+
+            return;
+
+        }
+
+
         currentGame =
             data;
 
 
         myPrivateInfo =
             null;
-
-
-        /*
-         * 非常重要：
-         *
-         * 不使用旧的 isHost 状态。
-         * 直接根据：
-         *
-         * roomData.hostId
-         *
-         * 和
-         *
-         * socket.id
-         *
-         * 判断。
-         */
-
-        if (
-            roomData &&
-            roomData.hostId ===
-                myId
-        ) {
-
-            console.log(
-                "当前玩家是房主"
-            );
-
-        } else {
-
-            console.log(
-                "当前玩家不是房主"
-            );
-
-        }
 
 
         showGame(
@@ -899,7 +1056,7 @@ socket.on(
 
 
 // ======================================================
-// 收到私人身份
+// 私人身份
 // ======================================================
 
 socket.on(
@@ -923,27 +1080,47 @@ socket.on(
 
 
 // ======================================================
-// 显示游戏页面
+// 显示游戏
 // ======================================================
 
 function showGame(data) {
 
-    lobby.style.display =
-        "none";
+    if (lobby) {
 
-    room.style.display =
-        "none";
+        lobby.style.display =
+            "none";
 
-    game.style.display =
-        "block";
+    }
 
 
-    document
-        .getElementById(
+    if (room) {
+
+        room.style.display =
+            "none";
+
+    }
+
+
+    if (game) {
+
+        game.style.display =
+            "block";
+
+    }
+
+
+    const roundNumber =
+        document.getElementById(
             "roundNumber"
-        )
-        .textContent =
-        data.round;
+        );
+
+
+    if (roundNumber) {
+
+        roundNumber.textContent =
+            data.round;
+
+    }
 
 
     const notice =
@@ -984,13 +1161,16 @@ function showGame(data) {
         );
 
 
+    if (!container) {
+
+        return;
+
+    }
+
+
     container.innerHTML =
         "";
 
-
-    /*
-     * 玩家卡片
-     */
 
     data.players.forEach(
         player => {
@@ -1115,20 +1295,13 @@ function showGame(data) {
     );
 
 
-    /*
-     * 最关键：
-     *
-     * 游戏开始后，
-     * 房主立即显示“结束本局”。
-     */
-
     addGameControlButtons();
 
 }
 
 
 // ======================================================
-// 根据人数计算 CT / T
+// CT / T 人数
 // ======================================================
 
 function getTeamCounts(
@@ -1136,6 +1309,7 @@ function getTeamCounts(
 ) {
 
     return {
+
         ct:
             Math.ceil(
                 playerCount / 2
@@ -1145,6 +1319,7 @@ function getTeamCounts(
             Math.floor(
                 playerCount / 2
             )
+
     };
 
 }
@@ -1168,10 +1343,6 @@ function addGameControlButtons() {
 
     }
 
-
-    /*
-     * 删除旧按钮
-     */
 
     const old =
         document.getElementById(
@@ -1199,20 +1370,21 @@ function addGameControlButtons() {
     controls.style.gridColumn =
         "1 / -1";
 
+
     controls.style.width =
         "100%";
 
+
     controls.style.textAlign =
         "center";
+
 
     controls.style.marginTop =
         "20px";
 
 
     /*
-     * ==================================================
-     * 游戏进行中
-     * ==================================================
+     * PLAYING
      */
 
     if (
@@ -1220,12 +1392,6 @@ function addGameControlButtons() {
         currentGame.state ===
             "PLAYING"
     ) {
-
-        /*
-         * 直接判断房主。
-         *
-         * 不使用 isHost。
-         */
 
         if (
             isCurrentHost()
@@ -1259,9 +1425,7 @@ function addGameControlButtons() {
 
 
     /*
-     * ==================================================
-     * 游戏已经结束
-     * ==================================================
+     * REVEAL
      */
 
     if (
@@ -1348,13 +1512,11 @@ function addGameControlButtons() {
 
             if (
                 confirm(
-                    "确定要返回大厅吗？"
+                    "确定要退出当前游戏并返回大厅吗？"
                 )
             ) {
 
-                clearLoginInfo();
-
-                location.reload();
+                leaveRoom();
 
             }
 
@@ -1374,19 +1536,6 @@ function addGameControlButtons() {
 
 
 // ======================================================
-// 请求自己的身份
-// ======================================================
-
-function requestMyPrivateInfo() {
-
-    socket.emit(
-        "request_private_role"
-    );
-
-}
-
-
-// ======================================================
 // 点击自己的卡片
 // ======================================================
 
@@ -1396,7 +1545,9 @@ function toggleMyCard(
 
     if (!myPrivateInfo) {
 
-        requestMyPrivateInfo();
+        alert(
+            "正在获取你的身份，请稍等"
+        );
 
         return;
 
@@ -1425,7 +1576,7 @@ function toggleMyCard(
 
 
 // ======================================================
-// 显示自己的身份
+// 显示身份
 // ======================================================
 
 function revealMyCard(
@@ -1496,7 +1647,7 @@ function revealMyCard(
 
 
 // ======================================================
-// 隐藏自己的身份
+// 隐藏身份
 // ======================================================
 
 function hideMyCard(
@@ -1532,7 +1683,7 @@ function hideMyCard(
 
 
 // ======================================================
-// 更新自己的卡
+// 更新自己的卡片
 // ======================================================
 
 function updateMyCard() {
@@ -1556,29 +1707,16 @@ function updateMyCard() {
 
     }
 
-
-    /*
-     * 不自动显示身份。
-     *
-     * 用户点击自己的卡片后才显示。
-     */
-
 }
 
 
 // ======================================================
-// 房主结束本局
+// 结束游戏
 // ======================================================
 
 function finishGame() {
 
-    /*
-     * 直接重新判断房主。
-     */
-
-    if (
-        !isCurrentHost()
-    ) {
+    if (!isCurrentHost()) {
 
         alert(
             "只有房主可以结束本局"
@@ -1589,9 +1727,7 @@ function finishGame() {
     }
 
 
-    if (
-        !socket.connected
-    ) {
+    if (!socket.connected) {
 
         alert(
             "服务器连接已经断开，请稍等后再试"
@@ -1613,22 +1749,15 @@ function finishGame() {
     }
 
 
-    const confirmed =
-        confirm(
+    if (
+        !confirm(
             "确定要结束本局并公布所有人的身份吗？"
-        );
-
-
-    if (!confirmed) {
+        )
+    ) {
 
         return;
 
     }
-
-
-    console.log(
-        "发送结束游戏请求"
-    );
 
 
     socket.emit(
@@ -1650,6 +1779,13 @@ socket.on(
             "游戏结束:",
             data
         );
+
+
+        if (!data) {
+
+            return;
+
+        }
 
 
         currentGame =
@@ -1676,22 +1812,42 @@ function showFinalResult(
     data
 ) {
 
-    lobby.style.display =
-        "none";
+    if (lobby) {
 
-    room.style.display =
-        "none";
+        lobby.style.display =
+            "none";
 
-    game.style.display =
-        "block";
+    }
 
 
-    document
-        .getElementById(
+    if (room) {
+
+        room.style.display =
+            "none";
+
+    }
+
+
+    if (game) {
+
+        game.style.display =
+            "block";
+
+    }
+
+
+    const roundNumber =
+        document.getElementById(
             "roundNumber"
-        )
-        .textContent =
-        data.round;
+        );
+
+
+    if (roundNumber) {
+
+        roundNumber.textContent =
+            data.round;
+
+    }
 
 
     const notice =
@@ -1724,6 +1880,13 @@ function showFinalResult(
         document.getElementById(
             "players"
         );
+
+
+    if (!container) {
+
+        return;
+
+    }
 
 
     container.innerHTML =
@@ -1819,15 +1982,6 @@ function showFinalResult(
     );
 
 
-    /*
-     * 游戏已经 REVEAL。
-     *
-     * 这里显示：
-     *
-     * 房主：开始下一局
-     * 普通玩家：等待房主
-     */
-
     addGameControlButtons();
 
 }
@@ -1839,9 +1993,7 @@ function showFinalResult(
 
 function nextRound() {
 
-    if (
-        !isCurrentHost()
-    ) {
+    if (!isCurrentHost()) {
 
         alert(
             "只有房主可以开始下一局"
@@ -1852,9 +2004,7 @@ function nextRound() {
     }
 
 
-    if (
-        !socket.connected
-    ) {
+    if (!socket.connected) {
 
         alert(
             "服务器连接已经断开，请稍等后再试"
@@ -1876,34 +2026,8 @@ function nextRound() {
     }
 
 
-    console.log(
-        "请求开始下一局"
-    );
-
-
     socket.emit(
-        "next_round",
-        result => {
-
-            console.log(
-                "下一局服务器返回:",
-                result
-            );
-
-
-            if (
-                result &&
-                !result.success
-            ) {
-
-                alert(
-                    result.message ||
-                    "下一局启动失败"
-                );
-
-            }
-
-        }
+        "next_round"
     );
 
 }
@@ -1926,158 +2050,6 @@ socket.on(
 
 
 // ======================================================
-// 某些服务器版本可能发送 room_created
-// ======================================================
-
-// ======================================================
-// 创建房间成功
-// ======================================================
-
-socket.on(
-    "room_created",
-    data => {
-
-        console.log(
-            "收到 room_created:",
-            data
-        );
-
-
-        if (!data) {
-
-            console.error(
-                "创建房间失败：服务器没有返回数据"
-            );
-
-            return;
-        }
-
-
-        /*
-         * 服务器当前返回的是房间对象本身：
-         *
-         * {
-         *     code,
-         *     hostId,
-         *     hostName,
-         *     mode,
-         *     state,
-         *     ...
-         * }
-         */
-
-        if (data.room) {
-
-            roomData =
-                data.room;
-
-        } else {
-
-            roomData =
-                data;
-
-        }
-
-
-        /*
-         * 保存房间号
-         */
-
-        if (
-            roomData &&
-            roomData.code
-        ) {
-
-            myRoomCode =
-                roomData.code;
-
-
-            localStorage.setItem(
-                "cs2_room_code",
-                roomData.code
-            );
-
-        }
-
-
-        /*
-         * 创建房间的人就是房主
-         */
-
-        console.log(
-            "创建房间成功:",
-            roomData
-        );
-
-
-        /*
-         * 进入大厅
-         */
-
-        showRoom();
-
-    }
-);
-
-
-// ======================================================
-// 加入房间成功
-// ======================================================
-
-socket.on(
-    "join_success",
-    data => {
-
-        console.log(
-            "收到 join_success:",
-            data
-        );
-
-
-        if (!data) {
-
-            return;
-
-        }
-
-
-        if (data.room) {
-
-            roomData =
-                data.room;
-
-        } else {
-
-            roomData =
-                data;
-
-        }
-
-
-        if (
-            roomData &&
-            roomData.code
-        ) {
-
-            myRoomCode =
-                roomData.code;
-
-
-            localStorage.setItem(
-                "cs2_room_code",
-                roomData.code
-            );
-
-        }
-
-
-        showRoom();
-
-    }
-);
-
-
-// ======================================================
 // 自动重连成功
 // ======================================================
 
@@ -2091,6 +2063,9 @@ socket.on(
         );
 
 
+        reconnecting = false;
+
+
         if (!data) {
 
             return;
@@ -2119,18 +2094,10 @@ socket.on(
             myRoomCode =
                 roomData.code;
 
-
-            localStorage.setItem(
-                "cs2_room_code",
-                roomData.code
-            );
+            saveLoginInfo();
 
         }
 
-
-        /*
-         * 根据服务器当前状态恢复页面
-         */
 
         if (
             roomData &&
@@ -2144,6 +2111,347 @@ socket.on(
 
     }
 );
+
+
+// ======================================================
+// 自动重连失败
+// ======================================================
+
+socket.on(
+    "rejoin_failed",
+    message => {
+
+        console.log(
+            "自动重连失败:",
+            message
+        );
+
+
+        reconnecting = false;
+
+
+        /*
+         * 房间已经不存在。
+         *
+         * 清除旧房间信息，
+         * 回到首页。
+         */
+
+        clearLoginInfo();
+
+
+        if (lobby) {
+
+            lobby.style.display =
+                "block";
+
+        }
+
+
+        if (room) {
+
+            room.style.display =
+                "none";
+
+        }
+
+
+        if (game) {
+
+            game.style.display =
+                "none";
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// 主动退出房间
+// ======================================================
+
+function leaveRoom() {
+
+    if (!myRoomCode) {
+
+        /*
+         * 如果没有房间，
+         * 直接回首页。
+         */
+
+        returnToLobby();
+
+        return;
+
+    }
+
+
+    if (
+        !confirm(
+            "确定要退出这个房间吗？"
+        )
+    ) {
+
+        return;
+
+    }
+
+
+    console.log(
+        "正在退出房间:",
+        myRoomCode
+    );
+
+
+    if (!socket.connected) {
+
+        alert(
+            "服务器连接已经断开，请稍等后再试"
+        );
+
+        return;
+
+    }
+
+
+    socket.emit(
+        "leave_room",
+        {},
+        result => {
+
+            console.log(
+                "退出房间服务器返回:",
+                result
+            );
+
+
+            if (
+                result &&
+                result.success ===
+                    false
+            ) {
+
+                alert(
+                    result.message ||
+                    "退出房间失败"
+                );
+
+                return;
+
+            }
+
+
+            /*
+             * 退出成功
+             */
+
+            clearLoginInfo();
+
+
+            returnToLobby();
+
+        }
+    );
+
+}
+
+
+// ======================================================
+// 返回创建房间页面
+// ======================================================
+
+function returnToLobby() {
+
+    /*
+     * 隐藏游戏
+     */
+
+    if (game) {
+
+        game.style.display =
+            "none";
+
+    }
+
+
+    /*
+     * 隐藏房间
+     */
+
+    if (room) {
+
+        room.style.display =
+            "none";
+
+    }
+
+
+    /*
+     * 显示首页
+     */
+
+    if (lobby) {
+
+        lobby.style.display =
+            "block";
+
+    }
+
+
+    /*
+     * 清空房间信息
+     */
+
+    const roomCodeElement =
+        document.getElementById(
+            "roomCode"
+        );
+
+
+    if (roomCodeElement) {
+
+        roomCodeElement.textContent =
+            "------";
+
+    }
+
+
+    const roomModeElement =
+        document.getElementById(
+            "roomMode"
+        );
+
+
+    if (roomModeElement) {
+
+        roomModeElement.textContent =
+            "------";
+
+    }
+
+
+    const playerListElement =
+        document.getElementById(
+            "playerList"
+        );
+
+
+    if (playerListElement) {
+
+        playerListElement.innerHTML =
+            "";
+
+    }
+
+
+    const playerCountElement =
+        document.getElementById(
+            "playerCount"
+        );
+
+
+    if (playerCountElement) {
+
+        playerCountElement.textContent =
+            "0";
+
+    }
+
+
+    const maxPlayerCountElement =
+        document.getElementById(
+            "maxPlayerCount"
+        );
+
+
+    if (maxPlayerCountElement) {
+
+        maxPlayerCountElement.textContent =
+            "10";
+
+    }
+
+
+    /*
+     * 隐藏开始游戏按钮
+     */
+
+    const startButton =
+        document.getElementById(
+            "startButton"
+        );
+
+
+    if (startButton) {
+
+        startButton.style.display =
+            "none";
+
+    }
+
+
+    /*
+     * 清空加入房间输入框
+     */
+
+    const roomCodeInput =
+        document.getElementById(
+            "roomCodeInput"
+        );
+
+
+    if (roomCodeInput) {
+
+        roomCodeInput.value =
+            "";
+
+    }
+
+
+    /*
+     * 清空昵称。
+     *
+     * 因为退出以后已经清除了本地登录信息。
+     */
+
+    const nameInput =
+        document.getElementById(
+            "nameInput"
+        );
+
+
+    if (nameInput) {
+
+        nameInput.value =
+            "";
+
+    }
+
+
+    /*
+     * 隐藏加入房间面板
+     */
+
+    const joinPanel =
+        document.getElementById(
+            "joinPanel"
+        );
+
+
+    if (joinPanel) {
+
+        joinPanel.style.display =
+            "none";
+
+    }
+
+
+    console.log(
+        "已经回到创建房间页面"
+    );
+
+}
 
 
 // ======================================================
@@ -2168,226 +2476,4 @@ function escapeHTML(
 
     return div.innerHTML;
 
-}
-// ======================================================
-// 主动退出房间
-// ======================================================
-
-function leaveRoom() {
-
-    if (!myRoomCode) {
-
-        alert(
-            "当前没有加入房间"
-        );
-
-        return;
-    }
-
-
-    if (
-        !confirm(
-            "确定要退出这个房间吗？"
-        )
-    ) {
-
-        return;
-    }
-
-
-    console.log(
-        "正在退出房间:",
-        myRoomCode
-    );
-
-
-    socket.emit(
-        "leave_room",
-        {},
-        result => {
-
-            console.log(
-                "退出房间服务器返回:",
-                result
-            );
-
-
-            if (
-                result &&
-                !result.success
-            ) {
-
-                alert(
-                    result.message ||
-                    "退出房间失败"
-                );
-
-                return;
-            }
-
-
-            // ==========================================
-            // 清除本地保存的房间信息
-            // ==========================================
-
-            localStorage.removeItem(
-                "cs2_room_code"
-            );
-
-            localStorage.removeItem(
-                "cs2_player_name"
-            );
-
-
-            // ==========================================
-            // 清除当前游戏数据
-            // ==========================================
-
-            myRoomCode =
-                null;
-
-            myPlayerName =
-                null;
-
-            roomData =
-                null;
-
-            currentGame =
-                null;
-
-            myPrivateInfo =
-                null;
-
-
-            // ==========================================
-            // 回到首页
-            // ==========================================
-
-            if (game) {
-
-                game.style.display =
-                    "none";
-
-            }
-
-
-            if (room) {
-
-                room.style.display =
-                    "none";
-
-            }
-
-
-            if (lobby) {
-
-                lobby.style.display =
-                    "block";
-
-            }
-
-
-            // 清空房间信息
-
-            const roomCodeElement =
-                document.getElementById(
-                    "roomCode"
-                );
-
-            if (roomCodeElement) {
-
-                roomCodeElement.textContent =
-                    "------";
-
-            }
-
-
-            const roomModeElement =
-                document.getElementById(
-                    "roomMode"
-                );
-
-            if (roomModeElement) {
-
-                roomModeElement.textContent =
-                    "------";
-
-            }
-
-
-            const playerListElement =
-                document.getElementById(
-                    "playerList"
-                );
-
-            if (playerListElement) {
-
-                playerListElement.innerHTML =
-                    "";
-
-            }
-
-
-            const playerCountElement =
-                document.getElementById(
-                    "playerCount"
-                );
-
-            if (playerCountElement) {
-
-                playerCountElement.textContent =
-                    "0";
-
-            }
-
-
-            const maxPlayerCountElement =
-                document.getElementById(
-                    "maxPlayerCount"
-                );
-
-            if (maxPlayerCountElement) {
-
-                maxPlayerCountElement.textContent =
-                    "10";
-
-            }
-
-
-            // 隐藏开始游戏按钮
-
-            const startButton =
-                document.getElementById(
-                    "startButton"
-                );
-
-            if (startButton) {
-
-                startButton.style.display =
-                    "none";
-
-            }
-
-
-            // 清空加入房间输入框
-
-            const roomCodeInput =
-                document.getElementById(
-                    "roomCodeInput"
-                );
-
-            if (roomCodeInput) {
-
-                roomCodeInput.value =
-                    "";
-
-            }
-
-
-            console.log(
-                "已经回到创建房间页面"
-            );
-
-        }
-    );
 }
