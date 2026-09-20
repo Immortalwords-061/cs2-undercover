@@ -1,6 +1,6 @@
 // ======================================================
 // CS2 内鬼模式 / 分组模式
-// 前端最终版 script.js
+// 前端最终稳定版 script.js
 // ======================================================
 
 
@@ -36,6 +36,8 @@ let currentGame = null;
 let myPrivateInfo = null;
 
 let reconnecting = false;
+
+let leavingRoom = false;
 
 
 // ======================================================
@@ -80,7 +82,7 @@ function isCurrentHost() {
 
 
 // ======================================================
-// 保存登录信息
+// 保存本地登录信息
 // ======================================================
 
 function saveLoginInfo() {
@@ -107,7 +109,7 @@ function saveLoginInfo() {
 
 
 // ======================================================
-// 清除登录信息
+// 清除本地登录信息
 // ======================================================
 
 function clearLoginInfo() {
@@ -134,7 +136,7 @@ function clearLoginInfo() {
 
 
 // ======================================================
-// Socket 连接
+// Socket 连接成功
 // ======================================================
 
 socket.on(
@@ -151,8 +153,20 @@ socket.on(
 
 
         /*
-         * 如果浏览器之前有房间记录，
-         * 自动恢复。
+         * 如果用户正在主动退出，
+         * 不允许自动重连。
+         */
+
+        if (leavingRoom) {
+
+            return;
+
+        }
+
+
+        /*
+         * 如果之前保存过房间信息，
+         * 自动尝试恢复。
          */
 
         if (
@@ -192,6 +206,13 @@ socket.on(
 
 function reconnectToGame() {
 
+    if (leavingRoom) {
+
+        return;
+
+    }
+
+
     if (
         !myRoomCode ||
         !myPlayerName
@@ -213,7 +234,8 @@ function reconnectToGame() {
 
 
     console.log(
-        "正在自动恢复游戏..."
+        "正在自动恢复房间:",
+        myRoomCode
     );
 
 
@@ -229,6 +251,113 @@ function reconnectToGame() {
     );
 
 }
+
+
+// ======================================================
+// 自动重连成功
+// ======================================================
+
+socket.on(
+    "rejoin_success",
+    data => {
+
+        console.log(
+            "收到 rejoin_success:",
+            data
+        );
+
+
+        reconnecting = false;
+
+
+        if (leavingRoom) {
+
+            return;
+
+        }
+
+
+        if (!data) {
+
+            return;
+
+        }
+
+
+        if (data.room) {
+
+            roomData =
+                data.room;
+
+        } else {
+
+            roomData =
+                data;
+
+        }
+
+
+        if (
+            roomData &&
+            roomData.code
+        ) {
+
+            myRoomCode =
+                roomData.code;
+
+            saveLoginInfo();
+
+        }
+
+
+        /*
+         * 等待状态
+         */
+
+        if (
+            roomData &&
+            roomData.state ===
+                "WAITING"
+        ) {
+
+            showRoom();
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// 自动重连失败
+// ======================================================
+
+socket.on(
+    "rejoin_failed",
+    message => {
+
+        console.log(
+            "自动重连失败:",
+            message
+        );
+
+
+        reconnecting = false;
+
+
+        if (leavingRoom) {
+
+            return;
+
+        }
+
+
+        clearLoginInfo();
+
+        returnToLobby();
+
+    }
+);
 
 
 // ======================================================
@@ -316,15 +445,31 @@ function createRoom(mode) {
     }
 
 
+    if (!socket.connected) {
+
+        alert(
+            "服务器连接中，请稍等一下再试"
+        );
+
+        return;
+
+    }
+
+
+    /*
+     * 创建房间时，
+     * 不是正在退出状态。
+     */
+
+    leavingRoom = false;
+
+
     myPlayerName =
         name;
 
 
     /*
-     * 这里只保存昵称。
-     *
-     * 房间号要等服务器真正创建成功
-     * 后再保存。
+     * 暂时只保存昵称。
      */
 
     localStorage.setItem(
@@ -334,7 +479,7 @@ function createRoom(mode) {
 
 
     console.log(
-        "发送创建房间:",
+        "发送 create_room:",
         {
             name:
                 name,
@@ -379,6 +524,13 @@ socket.on(
         );
 
 
+        if (leavingRoom) {
+
+            return;
+
+        }
+
+
         if (!data) {
 
             alert(
@@ -389,10 +541,6 @@ socket.on(
 
         }
 
-
-        /*
-         * 当前后端直接发送房间对象。
-         */
 
         if (data.room) {
 
@@ -489,7 +637,10 @@ function joinRoom() {
         );
 
 
-    if (!nameInput || !roomCodeInput) {
+    if (
+        !nameInput ||
+        !roomCodeInput
+    ) {
 
         console.error(
             "找不到加入房间输入框"
@@ -534,6 +685,20 @@ function joinRoom() {
     }
 
 
+    if (!socket.connected) {
+
+        alert(
+            "服务器连接中，请稍等一下再试"
+        );
+
+        return;
+
+    }
+
+
+    leavingRoom = false;
+
+
     myPlayerName =
         name;
 
@@ -545,7 +710,7 @@ function joinRoom() {
 
 
     console.log(
-        "发送加入房间:",
+        "发送 join_room:",
         {
             roomCode:
                 code,
@@ -555,13 +720,6 @@ function joinRoom() {
         }
     );
 
-
-    /*
-     * 注意：
-     *
-     * 后端要求 roomCode
-     * 不是 code。
-     */
 
     socket.emit(
         "join_room",
@@ -589,6 +747,13 @@ socket.on(
             "收到 join_success:",
             data
         );
+
+
+        if (leavingRoom) {
+
+            return;
+
+        }
 
 
         if (!data) {
@@ -635,7 +800,7 @@ socket.on(
 
 
 // ======================================================
-// 显示大厅
+// 显示房间
 // ======================================================
 
 function showRoom() {
@@ -683,6 +848,13 @@ socket.on(
         );
 
 
+        if (leavingRoom) {
+
+            return;
+
+        }
+
+
         if (!data) {
 
             return;
@@ -694,34 +866,6 @@ socket.on(
             data;
 
 
-        /*
-         * 如果服务器告诉我们
-         * 当前玩家已经不在房间里，
-         * 就不要继续显示房间。
-         */
-
-        const me =
-            roomData.players &&
-            roomData.players.find(
-                player =>
-                    player.id ===
-                    myId
-            );
-
-
-        if (
-            roomData.players &&
-            roomData.players.length > 0 &&
-            !me
-        ) {
-
-            console.log(
-                "当前玩家已经不在这个房间"
-            );
-
-        }
-
-
         updateRoomUI();
 
     }
@@ -729,7 +873,7 @@ socket.on(
 
 
 // ======================================================
-// 更新大厅 UI
+// 更新房间 UI
 // ======================================================
 
 function updateRoomUI() {
@@ -812,7 +956,7 @@ function updateRoomUI() {
 
 
     /*
-     * 游戏模式
+     * 模式
      */
 
     if (roomMode) {
@@ -1056,7 +1200,7 @@ socket.on(
 
 
 // ======================================================
-// 私人身份
+// 收到私人身份
 // ======================================================
 
 socket.on(
@@ -1080,7 +1224,7 @@ socket.on(
 
 
 // ======================================================
-// 显示游戏
+// 显示游戏页面
 // ======================================================
 
 function showGame(data) {
@@ -1190,7 +1334,7 @@ function showGame(data) {
 
 
             /*
-             * TEAM 模式
+             * 分组模式
              */
 
             if (
@@ -1231,7 +1375,7 @@ function showGame(data) {
 
 
             /*
-             * UNDERCOVER 模式
+             * 内鬼模式
              */
 
             const isMe =
@@ -1384,7 +1528,7 @@ function addGameControlButtons() {
 
 
     /*
-     * PLAYING
+     * 游戏进行中
      */
 
     if (
@@ -1425,7 +1569,7 @@ function addGameControlButtons() {
 
 
     /*
-     * REVEAL
+     * 游戏结束
      */
 
     if (
@@ -1486,7 +1630,7 @@ function addGameControlButtons() {
 
 
     /*
-     * 返回大厅
+     * 返回大厅 / 退出房间
      */
 
     const backButton =
@@ -1496,7 +1640,7 @@ function addGameControlButtons() {
 
 
     backButton.textContent =
-        "🏠 返回大厅";
+        "🚪 退出房间";
 
 
     backButton.className =
@@ -1510,15 +1654,7 @@ function addGameControlButtons() {
     backButton.onclick =
         () => {
 
-            if (
-                confirm(
-                    "确定要退出当前游戏并返回大厅吗？"
-                )
-            ) {
-
-                leaveRoom();
-
-            }
+            leaveRoom();
 
         };
 
@@ -1536,6 +1672,30 @@ function addGameControlButtons() {
 
 
 // ======================================================
+// 请求自己的身份
+// ======================================================
+
+function requestMyPrivateInfo() {
+
+    if (!socket.connected) {
+
+        alert(
+            "服务器连接已经断开"
+        );
+
+        return;
+
+    }
+
+
+    socket.emit(
+        "request_private_role"
+    );
+
+}
+
+
+// ======================================================
 // 点击自己的卡片
 // ======================================================
 
@@ -1545,9 +1705,7 @@ function toggleMyCard(
 
     if (!myPrivateInfo) {
 
-        alert(
-            "正在获取你的身份，请稍等"
-        );
+        requestMyPrivateInfo();
 
         return;
 
@@ -1683,7 +1841,7 @@ function hideMyCard(
 
 
 // ======================================================
-// 更新自己的卡片
+// 更新自己的卡
 // ======================================================
 
 function updateMyCard() {
@@ -1711,7 +1869,7 @@ function updateMyCard() {
 
 
 // ======================================================
-// 结束游戏
+// 结束本局
 // ======================================================
 
 function finishGame() {
@@ -2041,127 +2199,16 @@ socket.on(
     "error_message",
     message => {
 
-        alert(
-            message
-        );
-
-    }
-);
-
-
-// ======================================================
-// 自动重连成功
-// ======================================================
-
-socket.on(
-    "rejoin_success",
-    data => {
-
-        console.log(
-            "收到 rejoin_success:",
-            data
-        );
-
-
-        reconnecting = false;
-
-
-        if (!data) {
+        if (leavingRoom) {
 
             return;
 
         }
 
 
-        if (data.room) {
-
-            roomData =
-                data.room;
-
-        } else {
-
-            roomData =
-                data;
-
-        }
-
-
-        if (
-            roomData &&
-            roomData.code
-        ) {
-
-            myRoomCode =
-                roomData.code;
-
-            saveLoginInfo();
-
-        }
-
-
-        if (
-            roomData &&
-            roomData.state ===
-                "WAITING"
-        ) {
-
-            showRoom();
-
-        }
-
-    }
-);
-
-
-// ======================================================
-// 自动重连失败
-// ======================================================
-
-socket.on(
-    "rejoin_failed",
-    message => {
-
-        console.log(
-            "自动重连失败:",
+        alert(
             message
         );
-
-
-        reconnecting = false;
-
-
-        /*
-         * 房间已经不存在。
-         *
-         * 清除旧房间信息，
-         * 回到首页。
-         */
-
-        clearLoginInfo();
-
-
-        if (lobby) {
-
-            lobby.style.display =
-                "block";
-
-        }
-
-
-        if (room) {
-
-            room.style.display =
-                "none";
-
-        }
-
-
-        if (game) {
-
-            game.style.display =
-                "none";
-
-        }
 
     }
 );
@@ -2173,98 +2220,104 @@ socket.on(
 
 function leaveRoom() {
 
-    if (!myRoomCode) {
+    console.log(
+        "leaveRoom() 被调用"
+    );
 
-        /*
-         * 如果没有房间，
-         * 直接回首页。
-         */
 
-        returnToLobby();
+    /*
+     * 防止重复点击
+     */
+
+    if (leavingRoom) {
 
         return;
 
     }
 
 
-    if (
-        !confirm(
+    /*
+     * 确认退出
+     */
+
+    const confirmed =
+        confirm(
             "确定要退出这个房间吗？"
-        )
-    ) {
+        );
+
+
+    if (!confirmed) {
 
         return;
 
     }
+
+
+    /*
+     * 非常重要：
+     *
+     * 从现在开始，
+     * 禁止任何旧的重连逻辑把页面拉回房间。
+     */
+
+    leavingRoom = true;
+
+    reconnecting = false;
 
 
     console.log(
-        "正在退出房间:",
+        "确认退出房间:",
         myRoomCode
     );
 
 
-    if (!socket.connected) {
+    /*
+     * 通知服务器。
+     *
+     * 不等待 callback。
+     */
 
-        alert(
-            "服务器连接已经断开，请稍等后再试"
+    if (
+        socket &&
+        socket.connected
+    ) {
+
+        socket.emit(
+            "leave_room"
         );
-
-        return;
 
     }
 
 
-    socket.emit(
-        "leave_room",
-        {},
-        result => {
+    /*
+     * 立即清除本地信息。
+     */
 
-            console.log(
-                "退出房间服务器返回:",
-                result
-            );
+    clearLoginInfo();
 
 
-            if (
-                result &&
-                result.success ===
-                    false
-            ) {
+    /*
+     * 立即回到主界面。
+     */
 
-                alert(
-                    result.message ||
-                    "退出房间失败"
-                );
-
-                return;
-
-            }
-
-
-            /*
-             * 退出成功
-             */
-
-            clearLoginInfo();
-
-
-            returnToLobby();
-
-        }
-    );
+    returnToLobby();
 
 }
 
 
 // ======================================================
-// 返回创建房间页面
+// 返回主界面
 // ======================================================
 
 function returnToLobby() {
 
+    console.log(
+        "returnToLobby() 执行"
+    );
+
+
     /*
-     * 隐藏游戏
+     * 隐藏游戏页面
      */
 
     if (game) {
@@ -2276,7 +2329,7 @@ function returnToLobby() {
 
 
     /*
-     * 隐藏房间
+     * 隐藏房间页面
      */
 
     if (room) {
@@ -2288,7 +2341,7 @@ function returnToLobby() {
 
 
     /*
-     * 显示首页
+     * 显示主界面
      */
 
     if (lobby) {
@@ -2300,7 +2353,7 @@ function returnToLobby() {
 
 
     /*
-     * 清空房间信息
+     * 清空房间显示
      */
 
     const roomCodeElement =
@@ -2392,7 +2445,7 @@ function returnToLobby() {
 
 
     /*
-     * 清空加入房间输入框
+     * 清空房间号输入框
      */
 
     const roomCodeInput =
@@ -2410,9 +2463,7 @@ function returnToLobby() {
 
 
     /*
-     * 清空昵称。
-     *
-     * 因为退出以后已经清除了本地登录信息。
+     * 清空昵称
      */
 
     const nameInput =
@@ -2448,7 +2499,7 @@ function returnToLobby() {
 
 
     console.log(
-        "已经回到创建房间页面"
+        "已经回到主界面"
     );
 
 }
