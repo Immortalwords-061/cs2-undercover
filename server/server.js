@@ -18,28 +18,89 @@ const {
     getPrivatePlayerInfo
 } = require("./gameManager");
 
+
+/*
+ * ======================================================
+ * Express
+ * ======================================================
+ */
+
 const app = express();
 
 app.use(express.json());
 
+
 app.get("/", (req, res) => {
+
     res.json({
-        message: "CS2 Undercover Server",
-        status: "running"
+        message:
+            "CS2 Undercover Server",
+
+        status:
+            "running"
     });
+
 });
 
-const server = http.createServer(app);
 
-const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
+/*
+ * ======================================================
+ * HTTP Server
+ * ======================================================
+ */
+
+const server =
+    http.createServer(app);
+
+
+/*
+ * ======================================================
+ * Socket.IO
+ * ======================================================
+ */
+
+const io =
+    new Server(
+        server,
+        {
+            cors: {
+                origin: "*",
+                methods: [
+                    "GET",
+                    "POST"
+                ]
+            }
+        }
+    );
+
 
 const PORT =
     process.env.PORT || 3000;
+
+
+/*
+ * ======================================================
+ * 给客户端的房间数据
+ * ======================================================
+ *
+ * roomManager.js 原来的 getPublicRoom()
+ * 没有返回 isTestRoom。
+ *
+ * 所以这里统一补上。
+ */
+
+function getClientRoom(room) {
+
+    const result =
+        getPublicRoom(room);
+
+
+    result.isTestRoom =
+        room.isTestRoom === true;
+
+
+    return result;
+}
 
 
 /*
@@ -53,19 +114,27 @@ function syncGamePlayerSocketId(
     name,
     newSocketId
 ) {
+
     if (!room.currentGame) {
+
         return;
     }
 
+
     const gamePlayer =
         room.currentGame.players.find(
-            player => player.name === name
+            player =>
+                player.name === name
         );
 
+
     if (gamePlayer) {
+
         gamePlayer.id =
             newSocketId;
+
     }
+
 }
 
 
@@ -79,48 +148,92 @@ function sendCurrentGameToSocket(
     socket,
     room
 ) {
+
     if (!room.currentGame) {
+
         return;
     }
 
 
     /*
+     * ==========================================
      * 游戏进行中
+     * ==========================================
      */
 
-    if (room.state === "PLAYING") {
-
-        socket.emit(
-            "game_started",
-            getPublicGame(
-                room.currentGame,
-                false
-            )
-        );
-
+    if (
+        room.state ===
+        "PLAYING"
+    ) {
 
         /*
-         * 内鬼模式发送私人身份
+         * 单人测试房间
+         *
+         * 测试玩家直接看到所有 Bot 的
+         * 阵营 / 身份 / 任务。
          */
 
         if (
-            room.mode ===
-            "UNDERCOVER"
+            room.isTestRoom === true
         ) {
 
-            const info =
-                getPrivatePlayerInfo(
+            const testGame =
+                getPublicGame(
                     room.currentGame,
-                    socket.id
+                    true
                 );
 
 
-            if (info) {
+            testGame.isTestRoom =
+                true;
 
-                socket.emit(
-                    "private_role",
-                    info
-                );
+
+            socket.emit(
+                "game_started",
+                testGame
+            );
+
+        } else {
+
+            /*
+             * 普通多人房间
+             *
+             * 只能看到公开信息。
+             */
+
+            socket.emit(
+                "game_started",
+                getPublicGame(
+                    room.currentGame,
+                    false
+                )
+            );
+
+
+            /*
+             * 内鬼模式恢复私人身份
+             */
+
+            if (
+                room.mode ===
+                "UNDERCOVER"
+            ) {
+
+                const info =
+                    getPrivatePlayerInfo(
+                        room.currentGame,
+                        socket.id
+                    );
+
+
+                if (info) {
+
+                    socket.emit(
+                        "private_role",
+                        info
+                    );
+
+                }
 
             }
 
@@ -130,26 +243,46 @@ function sendCurrentGameToSocket(
 
 
     /*
+     * ==========================================
      * 游戏结束
+     * ==========================================
      */
 
-    if (room.state === "REVEAL") {
+    if (
+        room.state ===
+        "REVEAL"
+    ) {
 
-        socket.emit(
-            "game_finished",
+        const revealGame =
             getPublicGame(
                 room.currentGame,
                 true
-            )
+            );
+
+
+        if (
+            room.isTestRoom === true
+        ) {
+
+            revealGame.isTestRoom =
+                true;
+
+        }
+
+
+        socket.emit(
+            "game_finished",
+            revealGame
         );
 
     }
+
 }
 
 
 /*
  * ======================================================
- * 给所有真实玩家发送私人身份
+ * 给真实玩家发送私人身份
  * ======================================================
  */
 
@@ -174,8 +307,16 @@ function sendPrivateRoles(room) {
         player => {
 
             /*
-             * 机器人没有 socket
+             * Bot 没有 Socket。
              */
+
+            if (
+                player.isBot === true
+            ) {
+
+                return;
+            }
+
 
             const playerSocket =
                 io.sockets.sockets.get(
@@ -186,7 +327,6 @@ function sendPrivateRoles(room) {
             if (!playerSocket) {
 
                 return;
-
             }
 
 
@@ -214,7 +354,7 @@ function sendPrivateRoles(room) {
 
 /*
  * ======================================================
- * Socket.IO
+ * Socket.IO connection
  * ======================================================
  */
 
@@ -247,6 +387,10 @@ io.on(
                     } = data || {};
 
 
+                    /*
+                     * 检查昵称
+                     */
+
                     if (
                         !name ||
                         !name.trim()
@@ -264,6 +408,10 @@ io.on(
                     const playerName =
                         name.trim();
 
+
+                    /*
+                     * 检查人数
+                     */
 
                     const count =
                         Number(
@@ -288,6 +436,10 @@ io.on(
                     }
 
 
+                    /*
+                     * 创建房间
+                     */
+
                     const room =
                         createRoom(
                             socket.id,
@@ -297,7 +449,12 @@ io.on(
                         );
 
 
+                    /*
+                     * 添加房主
+                     */
+
                     room.players.push({
+
                         id:
                             socket.id,
 
@@ -315,8 +472,21 @@ io.on(
 
                         isBot:
                             false
+
                     });
 
+
+                    /*
+                     * 标记为普通房间
+                     */
+
+                    room.isTestRoom =
+                        false;
+
+
+                    /*
+                     * Socket 状态
+                     */
 
                     socket.roomCode =
                         room.code;
@@ -330,17 +500,25 @@ io.on(
                     );
 
 
+                    /*
+                     * 告诉创建者
+                     */
+
                     socket.emit(
                         "room_created",
-                        getPublicRoom(room)
+                        getClientRoom(room)
                     );
 
+
+                    /*
+                     * 广播房间
+                     */
 
                     io.to(
                         room.code
                     ).emit(
                         "room_update",
-                        getPublicRoom(room)
+                        getClientRoom(room)
                     );
 
 
@@ -357,10 +535,12 @@ io.on(
                         error
                     );
 
+
                     socket.emit(
                         "error_message",
                         "创建房间失败"
                     );
+
                 }
 
             }
@@ -369,17 +549,13 @@ io.on(
 
         /*
          * ==================================================
-         * 单人测试房间
+         * 创建单人测试房间
          * ==================================================
-         *
-         * 真实玩家 1 人
-         * +
-         * 自动机器人填满
          *
          * 例如选择 8 人：
          *
-         * 真实玩家 1
-         * 机器人 7
+         * 1 个真实玩家
+         * 7 个 Bot
          *
          * 仍然按照正常 8 人游戏规则运行。
          */
@@ -396,6 +572,10 @@ io.on(
                         maxPlayers
                     } = data || {};
 
+
+                    /*
+                     * 检查昵称
+                     */
 
                     if (
                         !name ||
@@ -414,6 +594,10 @@ io.on(
                     const playerName =
                         name.trim();
 
+
+                    /*
+                     * 检查人数
+                     */
 
                     const count =
                         Number(
@@ -452,7 +636,7 @@ io.on(
 
 
                     /*
-                     * 标记为测试房间
+                     * 标记测试房间
                      */
 
                     room.isTestRoom =
@@ -487,7 +671,7 @@ io.on(
 
 
                     /*
-                     * 自动补机器人
+                     * 自动添加 Bot
                      */
 
                     for (
@@ -521,6 +705,10 @@ io.on(
                     }
 
 
+                    /*
+                     * Socket 状态
+                     */
+
                     socket.roomCode =
                         room.code;
 
@@ -534,24 +722,24 @@ io.on(
 
 
                     /*
-                     * 告诉测试玩家
+                     * 告诉真实测试玩家
                      */
 
                     socket.emit(
                         "room_created",
-                        getPublicRoom(room)
+                        getClientRoom(room)
                     );
 
 
                     /*
-                     * 广播房间状态
+                     * 更新房间
                      */
 
                     io.to(
                         room.code
                     ).emit(
                         "room_update",
-                        getPublicRoom(room)
+                        getClientRoom(room)
                     );
 
 
@@ -568,10 +756,12 @@ io.on(
                         error
                     );
 
+
                     socket.emit(
                         "error_message",
                         "创建测试房间失败"
                     );
+
                 }
 
             }
@@ -596,6 +786,10 @@ io.on(
                     } = data || {};
 
 
+                    /*
+                     * 基本检查
+                     */
+
                     if (
                         !roomCode ||
                         !name
@@ -616,6 +810,10 @@ io.on(
                         );
 
 
+                    /*
+                     * 房间不存在
+                     */
+
                     if (!room) {
 
                         socket.emit(
@@ -626,6 +824,10 @@ io.on(
                         return;
                     }
 
+
+                    /*
+                     * 根据昵称找到原玩家
+                     */
 
                     const player =
                         room.players.find(
@@ -647,7 +849,7 @@ io.on(
 
 
                     /*
-                     * 防止人类冒充测试机器人
+                     * 防止冒充 Bot
                      */
 
                     if (
@@ -665,7 +867,7 @@ io.on(
 
 
                     /*
-                     * 更新 socket ID
+                     * 恢复 socket.id
                      */
 
                     player.id =
@@ -695,11 +897,12 @@ io.on(
 
                         room.hostId =
                             socket.id;
+
                     }
 
 
                     /*
-                     * 当前游戏同步 socket ID
+                     * 同步游戏中的 ID
                      */
 
                     syncGamePlayerSocketId(
@@ -710,24 +913,24 @@ io.on(
 
 
                     /*
-                     * 告诉客户端
+                     * 告诉本人
                      */
 
                     socket.emit(
                         "rejoin_success",
-                        getPublicRoom(room)
+                        getClientRoom(room)
                     );
 
 
                     /*
-                     * 通知房间其他人
+                     * 广播房间
                      */
 
                     io.to(
                         room.code
                     ).emit(
                         "room_update",
-                        getPublicRoom(room)
+                        getClientRoom(room)
                     );
 
 
@@ -753,10 +956,12 @@ io.on(
                         error
                     );
 
+
                     socket.emit(
                         "rejoin_failed",
                         "重新连接失败"
                     );
+
                 }
 
             }
@@ -820,7 +1025,7 @@ io.on(
 
 
                     /*
-                     * 已存在玩家
+                     * 检查是否已经是这个房间的玩家
                      */
 
                     const existingPlayer =
@@ -834,7 +1039,7 @@ io.on(
                     if (existingPlayer) {
 
                         /*
-                         * 不允许占用机器人名字
+                         * 不允许冒充 Bot
                          */
 
                         if (
@@ -850,6 +1055,10 @@ io.on(
                             return;
                         }
 
+
+                        /*
+                         * 恢复玩家
+                         */
 
                         existingPlayer.id =
                             socket.id;
@@ -867,6 +1076,10 @@ io.on(
                         );
 
 
+                        /*
+                         * 恢复房主
+                         */
+
                         if (
                             room.hostName ===
                             existingPlayer.name
@@ -874,8 +1087,13 @@ io.on(
 
                             room.hostId =
                                 socket.id;
+
                         }
 
+
+                        /*
+                         * 同步游戏中的 ID
+                         */
 
                         syncGamePlayerSocketId(
                             room,
@@ -886,7 +1104,7 @@ io.on(
 
                         socket.emit(
                             "join_success",
-                            getPublicRoom(room)
+                            getClientRoom(room)
                         );
 
 
@@ -894,7 +1112,7 @@ io.on(
                             room.code
                         ).emit(
                             "room_update",
-                            getPublicRoom(room)
+                            getClientRoom(room)
                         );
 
 
@@ -915,7 +1133,7 @@ io.on(
 
 
                     /*
-                     * 新玩家只能进入等待中的普通房间
+                     * 新玩家只能加入等待中的房间
                      */
 
                     if (
@@ -931,6 +1149,10 @@ io.on(
                         return;
                     }
 
+
+                    /*
+                     * 添加新玩家
+                     */
 
                     const result =
                         addPlayer(
@@ -984,7 +1206,7 @@ io.on(
 
                     socket.emit(
                         "join_success",
-                        getPublicRoom(room)
+                        getClientRoom(room)
                     );
 
 
@@ -992,7 +1214,7 @@ io.on(
                         room.code
                     ).emit(
                         "room_update",
-                        getPublicRoom(room)
+                        getClientRoom(room)
                     );
 
 
@@ -1008,10 +1230,12 @@ io.on(
                         error
                     );
 
+
                     socket.emit(
                         "error_message",
                         "加入房间失败"
                     );
+
                 }
 
             }
@@ -1051,6 +1275,10 @@ io.on(
                     }
 
 
+                    /*
+                     * 房主检查
+                     */
+
                     if (
                         room.hostId !==
                         socket.id
@@ -1064,6 +1292,10 @@ io.on(
                         return;
                     }
 
+
+                    /*
+                     * 状态检查
+                     */
 
                     if (
                         room.state !==
@@ -1085,6 +1317,13 @@ io.on(
                         );
 
 
+                    /*
+                     * 必须满员
+                     *
+                     * 测试房间因为有 Bot，
+                     * 这里自然也是满员。
+                     */
+
                     if (
                         room.players.length !==
                         maxPlayers
@@ -1098,6 +1337,10 @@ io.on(
                         return;
                     }
 
+
+                    /*
+                     * 创建第 1 局
+                     */
 
                     room.round =
                         1;
@@ -1116,27 +1359,61 @@ io.on(
 
 
                     /*
-                     * 广播公开游戏
+                     * ======================================
+                     * 单人测试
+                     * ======================================
+                     *
+                     * 测试玩家直接获得完整游戏数据。
                      */
 
-                    io.to(
-                        room.code
-                    ).emit(
-                        "game_started",
-                        getPublicGame(
-                            room.currentGame,
-                            false
-                        )
-                    );
+                    if (
+                        room.isTestRoom ===
+                        true
+                    ) {
+
+                        const testGame =
+                            getPublicGame(
+                                room.currentGame,
+                                true
+                            );
 
 
-                    /*
-                     * 发送私人身份
-                     */
+                        testGame.isTestRoom =
+                            true;
 
-                    sendPrivateRoles(
-                        room
-                    );
+
+                        socket.emit(
+                            "game_started",
+                            testGame
+                        );
+
+
+                    } else {
+
+                        /*
+                         * 普通多人游戏
+                         */
+
+                        io.to(
+                            room.code
+                        ).emit(
+                            "game_started",
+                            getPublicGame(
+                                room.currentGame,
+                                false
+                            )
+                        );
+
+
+                        /*
+                         * 私人身份
+                         */
+
+                        sendPrivateRoles(
+                            room
+                        );
+
+                    }
 
 
                     console.log(
@@ -1153,10 +1430,12 @@ io.on(
                         error
                     );
 
+
                     socket.emit(
                         "error_message",
                         "开始游戏失败"
                     );
+
                 }
 
             }
@@ -1196,6 +1475,10 @@ io.on(
                     }
 
 
+                    /*
+                     * 只有房主
+                     */
+
                     if (
                         room.hostId !==
                         socket.id
@@ -1209,6 +1492,10 @@ io.on(
                         return;
                     }
 
+
+                    /*
+                     * 必须正在游戏
+                     */
 
                     if (
                         room.state !==
@@ -1234,25 +1521,49 @@ io.on(
 
                         room.currentGame.state =
                             "REVEAL";
+
+                    }
+
+
+                    /*
+                     * 更新房间状态
+                     */
+
+                    io.to(
+                        room.code
+                    ).emit(
+                        "room_update",
+                        getClientRoom(room)
+                    );
+
+
+                    /*
+                     * 公布全部身份
+                     */
+
+                    const result =
+                        getPublicGame(
+                            room.currentGame,
+                            true
+                        );
+
+
+                    if (
+                        room.isTestRoom ===
+                        true
+                    ) {
+
+                        result.isTestRoom =
+                            true;
+
                     }
 
 
                     io.to(
                         room.code
                     ).emit(
-                        "room_update",
-                        getPublicRoom(room)
-                    );
-
-
-                    io.to(
-                        room.code
-                    ).emit(
                         "game_finished",
-                        getPublicGame(
-                            room.currentGame,
-                            true
-                        )
+                        result
                     );
 
 
@@ -1267,10 +1578,12 @@ io.on(
                         error
                     );
 
+
                     socket.emit(
                         "error_message",
                         "结束游戏失败"
                     );
+
                 }
 
             }
@@ -1310,6 +1623,10 @@ io.on(
                     }
 
 
+                    /*
+                     * 房主检查
+                     */
+
                     if (
                         room.hostId !==
                         socket.id
@@ -1323,6 +1640,10 @@ io.on(
                         return;
                     }
 
+
+                    /*
+                     * 状态检查
+                     */
 
                     if (
                         room.state !==
@@ -1344,6 +1665,10 @@ io.on(
                         );
 
 
+                    /*
+                     * 检查人数
+                     */
+
                     if (
                         room.players.length !==
                         maxPlayers
@@ -1357,6 +1682,10 @@ io.on(
                         return;
                     }
 
+
+                    /*
+                     * 下一局
+                     */
 
                     room.round +=
                         1;
@@ -1374,27 +1703,71 @@ io.on(
                         "PLAYING";
 
 
-                    io.to(
-                        room.code
-                    ).emit(
-                        "game_started",
-                        getPublicGame(
-                            room.currentGame,
-                            false
-                        )
-                    );
+                    /*
+                     * ======================================
+                     * 单人测试模式
+                     * ======================================
+                     */
+
+                    if (
+                        room.isTestRoom ===
+                        true
+                    ) {
+
+                        const testGame =
+                            getPublicGame(
+                                room.currentGame,
+                                true
+                            );
 
 
-                    sendPrivateRoles(
-                        room
-                    );
+                        testGame.isTestRoom =
+                            true;
 
+
+                        socket.emit(
+                            "game_started",
+                            testGame
+                        );
+
+
+                    } else {
+
+                        /*
+                         * 普通多人游戏
+                         */
+
+                        io.to(
+                            room.code
+                        ).emit(
+                            "game_started",
+                            getPublicGame(
+                                room.currentGame,
+                                false
+                            )
+                        );
+
+
+                        /*
+                         * 私人身份
+                         */
+
+                        sendPrivateRoles(
+                            room
+                        );
+
+                    }
+
+
+                    /*
+                     * 更新房间
+                     */
 
                     io.to(
                         room.code
                     ).emit(
                         "room_update",
-                        getPublicRoom(room)
+                        getClientRoom(room)
                     );
 
 
@@ -1410,10 +1783,12 @@ io.on(
                         error
                     );
 
+
                     socket.emit(
                         "error_message",
                         "开始下一局失败"
                     );
+
                 }
 
             }
@@ -1425,22 +1800,26 @@ io.on(
          * 主动退出房间
          * ==================================================
          *
-         * 支持：
+         * 兼容：
          *
          * socket.emit("leave_room")
+         *
          * socket.emit("leave_room", {})
+         *
          * socket.emit("leave_room", {}, callback)
+         *
          */
 
         socket.on(
             "leave_room",
             (data, maybeCallback) => {
 
-                let callback = null;
+                let callback =
+                    null;
 
 
                 /*
-                 * 只有真正的函数才是 callback
+                 * 第二个参数是函数
                  */
 
                 if (
@@ -1451,13 +1830,21 @@ io.on(
                     callback =
                         maybeCallback;
 
-                } else if (
+                }
+
+
+                /*
+                 * 第一个参数本身是函数
+                 */
+
+                else if (
                     typeof data ===
                     "function"
                 ) {
 
                     callback =
                         data;
+
                 }
 
 
@@ -1525,10 +1912,10 @@ io.on(
 
 
                     /*
-                     * 测试房间：
+                     * 测试房间
                      *
-                     * 唯一真实玩家退出以后，
-                     * 测试房间直接删除。
+                     * 只有一个真实玩家，
+                     * 退出后直接删除整个测试房间。
                      */
 
                     if (
@@ -1536,24 +1923,10 @@ io.on(
                         true
                     ) {
 
-                        const testPlayer =
-                            room.players.find(
-                                player =>
-                                    player.id ===
-                                    socket.id
-                            );
-
-
-                        if (
-                            testPlayer
-                        ) {
-
-                            console.log(
-                                `测试玩家退出测试房间: ${testPlayer.name}, ` +
-                                `房间: ${roomCode}`
-                            );
-
-                        }
+                        console.log(
+                            `测试玩家退出测试房间: ${socket.playerName}, ` +
+                            `房间: ${roomCode}`
+                        );
 
 
                         socket.leave(
@@ -1585,7 +1958,6 @@ io.on(
 
                         }
 
-
                         return;
                     }
 
@@ -1601,6 +1973,10 @@ io.on(
                                 socket.id
                         );
 
+
+                    /*
+                     * 没找到玩家
+                     */
 
                     if (!player) {
 
@@ -1636,11 +2012,19 @@ io.on(
                         socket.id;
 
 
+                    /*
+                     * 真正删除玩家
+                     */
+
                     removePlayer(
                         room,
                         socket.id
                     );
 
+
+                    /*
+                     * 离开 Socket.IO 房间
+                     */
 
                     socket.leave(
                         roomCode
@@ -1661,7 +2045,8 @@ io.on(
 
 
                     /*
-                     * 房主退出以后转移房主
+                     * 房主退出以后，
+                     * 交给第一个剩余玩家
                      */
 
                     if (
@@ -1676,11 +2061,16 @@ io.on(
                         room.hostName =
                             room.players[0].name;
 
+
+                        console.log(
+                            `新房主: ${room.hostName}`
+                        );
+
                     }
 
 
                     /*
-                     * 没人了就删除
+                     * 没有人了
                      */
 
                     if (
@@ -1692,17 +2082,30 @@ io.on(
                             roomCode
                         );
 
+
+                        console.log(
+                            `房间已删除: ${roomCode}`
+                        );
+
                     } else {
+
+                        /*
+                         * 通知剩余玩家
+                         */
 
                         io.to(
                             roomCode
                         ).emit(
                             "room_update",
-                            getPublicRoom(room)
+                            getClientRoom(room)
                         );
 
                     }
 
+
+                    /*
+                     * callback 可选
+                     */
 
                     if (
                         typeof callback ===
@@ -1723,6 +2126,10 @@ io.on(
                         error
                     );
 
+
+                    /*
+                     * 防止 callback 再导致服务器崩溃
+                     */
 
                     if (
                         typeof callback ===
@@ -1747,12 +2154,13 @@ io.on(
 
         /*
          * ==================================================
-         * 玩家断线
+         * 玩家断开连接
          * ==================================================
          *
-         * 不删除玩家。
+         * 这里故意不删除玩家。
          *
-         * 回来以后自动重连。
+         * 只要房间还存在，
+         * 玩家就可以重新回来。
          */
 
         socket.on(
@@ -1771,6 +2179,10 @@ io.on(
                     socket.roomCode;
 
 
+                /*
+                 * 没有加入房间
+                 */
+
                 if (!roomCode) {
 
                     return;
@@ -1783,6 +2195,10 @@ io.on(
                     );
 
 
+                /*
+                 * 房间不存在
+                 */
+
                 if (!room) {
 
                     return;
@@ -1792,9 +2208,11 @@ io.on(
                 /*
                  * 最重要：
                  *
-                 * 不 removePlayer。
+                 * 不 removePlayer()
                  *
-                 * 玩家一直保留在房间中。
+                 * 不 deleteRoom()
+                 *
+                 * 不计时踢出。
                  */
 
                 console.log(
