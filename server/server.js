@@ -754,17 +754,17 @@ io.on("connection", socket => {
                 }
 
                 io.to(room.code).emit(
-                    "game_finished",
-                    getPublicGame(
-                        room.currentGame,
-                        true
-                    )
-                );
+    "room_update",
+    getPublicRoom(room)
+);
 
-                io.to(room.code).emit(
-                    "room_update",
-                    getPublicRoom(room)
-                );
+io.to(room.code).emit(
+    "game_finished",
+    getPublicGame(
+        room.currentGame,
+        true
+    )
+);
 
                 console.log(
                     `游戏结束: ${room.code}`

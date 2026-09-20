@@ -523,7 +523,13 @@ socket.on(
             gameData
         );
 
-        addFinishButtons();
+        /*
+         * 等待 room_update 完成后，
+         * 再判断当前玩家是不是房主。
+         */
+        setTimeout(() => {
+            addFinishButtons();
+        }, 100);
     }
 );
 
