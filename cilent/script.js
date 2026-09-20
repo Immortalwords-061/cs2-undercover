@@ -468,9 +468,14 @@ socket.on(
         renderGame(
             gameData
         );
+
+        /*
+         * 游戏开始后，
+         * 房主显示“结束游戏”按钮
+         */
+        addGameControlButtons();
     }
 );
-
 
 /* =========================
    私人身份信息
@@ -523,13 +528,7 @@ socket.on(
             gameData
         );
 
-        /*
-         * 等待 room_update 完成后，
-         * 再判断当前玩家是不是房主。
-         */
-        setTimeout(() => {
-            addFinishButtons();
-        }, 100);
+        addGameControlButtons();
     }
 );
 
@@ -668,11 +667,10 @@ function renderGame(gameData) {
      * 根据游戏状态添加按钮
      */
     if (
-        gameData.state ===
-        "REVEAL"
-    ) {
-        addFinishButtons();
-    }
+    gameData.state ===
+    "REVEAL"
+) {
+    addGameControlButtons();
 }
 
 
@@ -834,9 +832,9 @@ function toggleMyInfo(card) {
    游戏结束按钮
    ========================= */
 
-function addFinishButtons() {
+function addGameControlButtons() {
     /*
-     * 避免重复添加
+     * 避免重复创建按钮
      */
     const oldContainer =
         document.getElementById(
@@ -858,32 +856,134 @@ function addFinishButtons() {
     container.style.marginTop =
         "20px";
 
+
     /*
-     * 只有房主显示下一局
+     * =========================
+     * 游戏进行中
+     * =========================
      */
+
     if (
-        currentRoom &&
-        socket.id ===
-            currentRoom.hostId
+        currentGame &&
+        currentGame.state ===
+            "PLAYING"
     ) {
-        const nextButton =
-            document.createElement(
-                "button"
+        /*
+         * 只有房主可以结束游戏
+         */
+        if (
+            currentRoom &&
+            socket.id ===
+                currentRoom.hostId
+        ) {
+            const finishButton =
+                document.createElement(
+                    "button"
+                );
+
+            finishButton.textContent =
+                "🏁 结束游戏";
+
+            finishButton.onclick =
+                () => {
+                    if (
+                        confirm(
+                            "确定要结束这一局并公布所有人的身份吗？"
+                        )
+                    ) {
+                        finishGame();
+                    }
+                };
+
+            container.appendChild(
+                finishButton
             );
-
-        nextButton.textContent =
-            "🔄 开始下一局";
-
-        nextButton.onclick =
-            () => {
-                nextRound();
-            };
-
-        container.appendChild(
-            nextButton
-        );
+        }
     }
 
+
+    /*
+     * =========================
+     * 游戏结束
+     * =========================
+     */
+
+    if (
+        currentGame &&
+        currentGame.state ===
+            "REVEAL"
+    ) {
+        /*
+         * 只有房主可以开始下一局
+         */
+        if (
+            currentRoom &&
+            socket.id ===
+                currentRoom.hostId
+        ) {
+            const nextButton =
+                document.createElement(
+                    "button"
+                );
+
+            nextButton.textContent =
+                "🔄 开始下一局";
+
+            nextButton.onclick =
+                () => {
+                    nextRound();
+                };
+
+            container.appendChild(
+                nextButton
+            );
+        }
+    }
+
+
+    /*
+     * 返回大厅
+     */
+    const backButton =
+        document.createElement(
+            "button"
+        );
+
+    backButton.textContent =
+        "🏠 返回大厅";
+
+    backButton.className =
+        "secondary";
+
+    backButton.style.marginLeft =
+        "10px";
+
+    backButton.onclick =
+        () => {
+            clearLoginInfo();
+
+            location.reload();
+        };
+
+    container.appendChild(
+        backButton
+    );
+
+
+    /*
+     * 添加到游戏面板
+     */
+    const panel =
+        game.querySelector(
+            ".panel"
+        );
+
+    if (panel) {
+        panel.appendChild(
+            container
+        );
+    }
+}
     /*
      * 返回大厅
      */
