@@ -6,7 +6,7 @@ const {
 
 /*
  * ======================================================
- * 阵营人数
+ * CT / T 人数
  * ======================================================
  */
 
@@ -24,12 +24,10 @@ function getTeamCounts(
             playerCount / 2
         );
 
-
     return {
         ctCount,
         tCount
     };
-
 }
 
 
@@ -38,20 +36,19 @@ function getTeamCounts(
  * 创建游戏
  * ======================================================
  *
- * UNDERCOVER：
+ * 内鬼模式：
  *
  * 每个阵营：
  *
  * 1 个 SPY
  * 1 个 DODO
- * 其余 GOOD
+ * 其余 CIVILIAN
  *
  *
- * TEAM：
+ * 分组模式：
  *
  * 没有身份
  * 没有任务
- *
  */
 
 function createGame(
@@ -59,6 +56,10 @@ function createGame(
     round,
     mode = "UNDERCOVER"
 ) {
+
+    /*
+     * 人数限制
+     */
 
     if (
         players.length < 6 ||
@@ -73,22 +74,31 @@ function createGame(
 
 
     /*
-     * 清理上一局身份
+     * ==================================================
+     * 清除上一局
+     * ==================================================
      */
 
     players.forEach(
         player => {
 
-            player.team = null;
-            player.role = null;
-            player.task = null;
+            player.team =
+                null;
+
+            player.role =
+                null;
+
+            player.task =
+                null;
 
         }
     );
 
 
     /*
-     * 随机玩家
+     * ==================================================
+     * 随机分队
+     * ==================================================
      */
 
     const shuffledPlayers =
@@ -96,10 +106,6 @@ function createGame(
             [...players]
         );
 
-
-    /*
-     * CT / T 人数
-     */
 
     const {
         ctCount,
@@ -111,7 +117,7 @@ function createGame(
 
 
     /*
-     * 分 CT
+     * CT
      */
 
     shuffledPlayers
@@ -130,7 +136,7 @@ function createGame(
 
 
     /*
-     * 分 T
+     * T
      */
 
     shuffledPlayers
@@ -161,7 +167,8 @@ function createGame(
 
         return {
 
-            round,
+            round:
+                round,
 
             mode:
                 "TEAM",
@@ -189,7 +196,10 @@ function createGame(
                             null,
 
                         task:
-                            null
+                            null,
+
+                        isBot:
+                            player.isBot === true
 
                     })
                 )
@@ -222,7 +232,9 @@ function createGame(
 
 
     /*
-     * 每队随机一个内鬼
+     * ==================================================
+     * CT 内鬼
+     * ==================================================
      */
 
     const ctSpy =
@@ -234,6 +246,16 @@ function createGame(
         ];
 
 
+    ctSpy.role =
+        "SPY";
+
+
+    /*
+     * ==================================================
+     * T 内鬼
+     * ==================================================
+     */
+
     const tSpy =
         tPlayers[
             Math.floor(
@@ -243,33 +265,23 @@ function createGame(
         ];
 
 
-    ctSpy.role =
-        "SPY";
-
-
     tSpy.role =
         "SPY";
 
 
     /*
      * ==================================================
-     * 每队再随机一个呆呆鸟
+     * CT 呆呆鸟
      * ==================================================
      *
-     * 必须排除已经成为 SPY 的人。
+     * 从 CT 中排除内鬼后再随机。
      */
 
     const ctDodoCandidates =
         ctPlayers.filter(
             player =>
-                player !== ctSpy
-        );
-
-
-    const tDodoCandidates =
-        tPlayers.filter(
-            player =>
-                player !== tSpy
+                player !==
+                ctSpy
         );
 
 
@@ -282,6 +294,24 @@ function createGame(
         ];
 
 
+    ctDodo.role =
+        "DODO";
+
+
+    /*
+     * ==================================================
+     * T 呆呆鸟
+     * ==================================================
+     */
+
+    const tDodoCandidates =
+        tPlayers.filter(
+            player =>
+                player !==
+                tSpy
+        );
+
+
     const tDodo =
         tDodoCandidates[
             Math.floor(
@@ -291,16 +321,20 @@ function createGame(
         ];
 
 
-    ctDodo.role =
-        "DODO";
-
-
     tDodo.role =
         "DODO";
 
 
     /*
-     * 其他人全部 GOOD
+     * ==================================================
+     * 其余暂时设成 GOOD
+     * ==================================================
+     *
+     * 这里故意暂时使用 GOOD，
+     * 因为你原来的 taskManager.js
+     * 就是按照原来的 GOOD 身份分配任务。
+     *
+     * 分配完以后再统一改成 CIVILIAN。
      */
 
     players.forEach(
@@ -318,9 +352,9 @@ function createGame(
 
 
     /*
-     * 先让原来的任务系统分配任务。
-     *
-     * 后面会把 DODO 的任务覆盖掉。
+     * ==================================================
+     * 分配原来的任务
+     * ==================================================
      */
 
     assignTasks(
@@ -335,7 +369,7 @@ function createGame(
      */
 
     const DODO_TASK =
-        "让自己的队友认为自己是内鬼，并把自己投出去。你的任务是假的。";
+        "让自己的队友认为自己是内鬼并把自己投出去。你的任务是假的。";
 
 
     players.forEach(
@@ -356,12 +390,38 @@ function createGame(
 
 
     /*
-     * 返回当前游戏
+     * ==================================================
+     * GOOD → CIVILIAN
+     * ==================================================
+     */
+
+    players.forEach(
+        player => {
+
+            if (
+                player.role ===
+                "GOOD"
+            ) {
+
+                player.role =
+                    "CIVILIAN";
+
+            }
+
+        }
+    );
+
+
+    /*
+     * ==================================================
+     * 返回游戏数据
+     * ==================================================
      */
 
     return {
 
-        round,
+        round:
+            round,
 
         mode:
             "UNDERCOVER",
@@ -389,7 +449,10 @@ function createGame(
                         player.role,
 
                     task:
-                        player.task
+                        player.task,
+
+                    isBot:
+                        player.isBot === true
 
                 })
             )
@@ -401,20 +464,19 @@ function createGame(
 
 /*
  * ======================================================
- * 获取公开游戏信息
+ * 获取公开游戏
  * ======================================================
  *
  * reveal = false
  *
- * 游戏进行中：
- * 不显示身份
+ * 游戏过程中：
+ * 隐藏身份
  *
  *
  * reveal = true
  *
  * 游戏结束：
- * 显示全部身份和任务
- *
+ * 显示身份和任务
  */
 
 function getPublicGame(
@@ -433,6 +495,9 @@ function getPublicGame(
         state:
             game.state,
 
+        isTestRoom:
+            game.isTestRoom === true,
+
         players:
             game.players.map(
                 player => {
@@ -450,6 +515,10 @@ function getPublicGame(
 
                     };
 
+
+                    /*
+                     * 只有揭晓时显示身份
+                     */
 
                     if (
                         reveal &&
@@ -478,7 +547,7 @@ function getPublicGame(
 
 /*
  * ======================================================
- * 获取一个玩家的私人信息
+ * 获取私人身份
  * ======================================================
  */
 
@@ -489,8 +558,8 @@ function getPrivatePlayerInfo(
 
     const player =
         game.players.find(
-            player =>
-                player.id ===
+            item =>
+                item.id ===
                 playerId
         );
 
@@ -503,7 +572,7 @@ function getPrivatePlayerInfo(
 
 
     /*
-     * 分组模式没有身份
+     * 分组模式
      */
 
     if (
@@ -529,6 +598,10 @@ function getPrivatePlayerInfo(
 
     }
 
+
+    /*
+     * 内鬼模式
+     */
 
     return {
 
