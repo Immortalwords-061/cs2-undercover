@@ -3,112 +3,227 @@ const {
     shuffle
 } = require("./taskManager");
 
-function getTeamCounts(playerCount) {
+
+/*
+ * ======================================================
+ * 阵营人数
+ * ======================================================
+ */
+
+function getTeamCounts(
+    playerCount
+) {
+
     const ctCount =
-        Math.ceil(playerCount / 2);
+        Math.ceil(
+            playerCount / 2
+        );
 
     const tCount =
-        Math.floor(playerCount / 2);
+        Math.floor(
+            playerCount / 2
+        );
+
 
     return {
         ctCount,
         tCount
     };
+
 }
+
+
+/*
+ * ======================================================
+ * 创建游戏
+ * ======================================================
+ *
+ * UNDERCOVER：
+ *
+ * 每个阵营：
+ *
+ * 1 个 SPY
+ * 1 个 DODO
+ * 其余 GOOD
+ *
+ *
+ * TEAM：
+ *
+ * 没有身份
+ * 没有任务
+ *
+ */
 
 function createGame(
     players,
     round,
     mode = "UNDERCOVER"
 ) {
+
     if (
         players.length < 6 ||
         players.length > 16
     ) {
+
         throw new Error(
             "游戏人数必须在6到16人之间"
         );
+
     }
 
-    players.forEach(player => {
-        player.team = null;
-        player.role = null;
-        player.task = null;
-    });
+
+    /*
+     * 清理上一局身份
+     */
+
+    players.forEach(
+        player => {
+
+            player.team = null;
+            player.role = null;
+            player.task = null;
+
+        }
+    );
+
+
+    /*
+     * 随机玩家
+     */
 
     const shuffledPlayers =
-        shuffle(players);
+        shuffle(
+            [...players]
+        );
+
+
+    /*
+     * CT / T 人数
+     */
 
     const {
         ctCount,
         tCount
-    } = getTeamCounts(
-        players.length
-    );
+    } =
+        getTeamCounts(
+            players.length
+        );
+
+
+    /*
+     * 分 CT
+     */
 
     shuffledPlayers
-        .slice(0, ctCount)
-        .forEach(player => {
-            player.team = "CT";
-        });
+        .slice(
+            0,
+            ctCount
+        )
+        .forEach(
+            player => {
+
+                player.team =
+                    "CT";
+
+            }
+        );
+
+
+    /*
+     * 分 T
+     */
 
     shuffledPlayers
         .slice(
             ctCount,
             ctCount + tCount
         )
-        .forEach(player => {
-            player.team = "T";
-        });
+        .forEach(
+            player => {
+
+                player.team =
+                    "T";
+
+            }
+        );
+
 
     /*
-     * 组队模式
-     *
-     * 没有内鬼
-     * 没有任务
+     * ==================================================
+     * 分组模式
+     * ==================================================
      */
-    if (mode === "TEAM") {
+
+    if (
+        mode ===
+        "TEAM"
+    ) {
+
         return {
+
             round,
 
-            mode: "TEAM",
+            mode:
+                "TEAM",
 
-            state: "PLAYING",
+            state:
+                "PLAYING",
 
-            startedAt: Date.now(),
+            startedAt:
+                Date.now(),
 
             players:
-                players.map(player => ({
-                    id: player.id,
+                players.map(
+                    player => ({
 
-                    name: player.name,
+                        id:
+                            player.id,
 
-                    team: player.team,
+                        name:
+                            player.name,
 
-                    role: null,
+                        team:
+                            player.team,
 
-                    task: null
-                }))
+                        role:
+                            null,
+
+                        task:
+                            null
+
+                    })
+                )
+
         };
+
     }
 
+
     /*
+     * ==================================================
      * 内鬼模式
-     *
-     * 每个队伍随机一名内鬼
+     * ==================================================
      */
 
     const ctPlayers =
         players.filter(
             player =>
-                player.team === "CT"
+                player.team ===
+                "CT"
         );
+
 
     const tPlayers =
         players.filter(
             player =>
-                player.team === "T"
+                player.team ===
+                "T"
         );
+
+
+    /*
+     * 每队随机一个内鬼
+     */
 
     const ctSpy =
         ctPlayers[
@@ -118,6 +233,7 @@ function createGame(
             )
         ];
 
+
     const tSpy =
         tPlayers[
             Math.floor(
@@ -126,134 +242,325 @@ function createGame(
             )
         ];
 
-    ctSpy.role = "SPY";
 
-    tSpy.role = "SPY";
+    ctSpy.role =
+        "SPY";
 
-    players.forEach(player => {
-        if (!player.role) {
-            player.role = "GOOD";
-        }
-    });
+
+    tSpy.role =
+        "SPY";
+
 
     /*
-     * 好人获得任务
-     * 内鬼获得内鬼任务
+     * ==================================================
+     * 每队再随机一个呆呆鸟
+     * ==================================================
+     *
+     * 必须排除已经成为 SPY 的人。
      */
-    assignTasks(players);
+
+    const ctDodoCandidates =
+        ctPlayers.filter(
+            player =>
+                player !== ctSpy
+        );
+
+
+    const tDodoCandidates =
+        tPlayers.filter(
+            player =>
+                player !== tSpy
+        );
+
+
+    const ctDodo =
+        ctDodoCandidates[
+            Math.floor(
+                Math.random() *
+                ctDodoCandidates.length
+            )
+        ];
+
+
+    const tDodo =
+        tDodoCandidates[
+            Math.floor(
+                Math.random() *
+                tDodoCandidates.length
+            )
+        ];
+
+
+    ctDodo.role =
+        "DODO";
+
+
+    tDodo.role =
+        "DODO";
+
+
+    /*
+     * 其他人全部 GOOD
+     */
+
+    players.forEach(
+        player => {
+
+            if (!player.role) {
+
+                player.role =
+                    "GOOD";
+
+            }
+
+        }
+    );
+
+
+    /*
+     * 先让原来的任务系统分配任务。
+     *
+     * 后面会把 DODO 的任务覆盖掉。
+     */
+
+    assignTasks(
+        players
+    );
+
+
+    /*
+     * ==================================================
+     * 呆呆鸟专属任务
+     * ==================================================
+     */
+
+    const DODO_TASK =
+        "让自己的队友认为自己是内鬼，并把自己投出去。你的任务是假的。";
+
+
+    players.forEach(
+        player => {
+
+            if (
+                player.role ===
+                "DODO"
+            ) {
+
+                player.task =
+                    DODO_TASK;
+
+            }
+
+        }
+    );
+
+
+    /*
+     * 返回当前游戏
+     */
 
     return {
+
         round,
 
-        mode: "UNDERCOVER",
+        mode:
+            "UNDERCOVER",
 
-        state: "PLAYING",
+        state:
+            "PLAYING",
 
-        startedAt: Date.now(),
+        startedAt:
+            Date.now(),
 
         players:
-            players.map(player => ({
-                id: player.id,
+            players.map(
+                player => ({
 
-                name: player.name,
+                    id:
+                        player.id,
 
-                team: player.team,
+                    name:
+                        player.name,
 
-                role: player.role,
+                    team:
+                        player.team,
 
-                task: player.task
-            }))
+                    role:
+                        player.role,
+
+                    task:
+                        player.task
+
+                })
+            )
+
     };
+
 }
+
+
+/*
+ * ======================================================
+ * 获取公开游戏信息
+ * ======================================================
+ *
+ * reveal = false
+ *
+ * 游戏进行中：
+ * 不显示身份
+ *
+ *
+ * reveal = true
+ *
+ * 游戏结束：
+ * 显示全部身份和任务
+ *
+ */
 
 function getPublicGame(
     game,
     reveal = false
 ) {
+
     return {
-        round: game.round,
 
-        mode: game.mode,
+        round:
+            game.round,
 
-        state: game.state,
+        mode:
+            game.mode,
+
+        state:
+            game.state,
 
         players:
-            game.players.map(player => {
-                const result = {
-                    id: player.id,
+            game.players.map(
+                player => {
 
-                    name: player.name,
+                    const result = {
 
-                    team: player.team
-                };
+                        id:
+                            player.id,
 
-                /*
-                 * 游戏结束后才公开
-                 * 身份和任务
-                 */
-                if (
-                    reveal &&
-                    game.mode ===
-                        "UNDERCOVER"
-                ) {
-                    result.role =
-                        player.role;
+                        name:
+                            player.name,
 
-                    result.task =
-                        player.task;
+                        team:
+                            player.team
+
+                    };
+
+
+                    if (
+                        reveal &&
+                        game.mode ===
+                            "UNDERCOVER"
+                    ) {
+
+                        result.role =
+                            player.role;
+
+                        result.task =
+                            player.task;
+
+                    }
+
+
+                    return result;
+
                 }
+            )
 
-                return result;
-            })
     };
+
 }
+
+
+/*
+ * ======================================================
+ * 获取一个玩家的私人信息
+ * ======================================================
+ */
 
 function getPrivatePlayerInfo(
     game,
     playerId
 ) {
+
     const player =
         game.players.find(
             player =>
-                player.id === playerId
+                player.id ===
+                playerId
         );
 
+
     if (!player) {
+
         return null;
+
     }
 
+
     /*
-     * 组队模式
-     * 不存在身份和任务
+     * 分组模式没有身份
      */
-    if (game.mode === "TEAM") {
+
+    if (
+        game.mode ===
+        "TEAM"
+    ) {
+
         return {
-            name: player.name,
 
-            team: player.team,
+            name:
+                player.name,
 
-            role: null,
+            team:
+                player.team,
 
-            task: null
+            role:
+                null,
+
+            task:
+                null
+
         };
+
     }
 
-    /*
-     * 内鬼模式
-     */
+
     return {
-        name: player.name,
 
-        team: player.team,
+        name:
+            player.name,
 
-        role: player.role,
+        team:
+            player.team,
 
-        task: player.task
+        role:
+            player.role,
+
+        task:
+            player.task
+
     };
+
 }
 
+
+/*
+ * ======================================================
+ * 导出
+ * ======================================================
+ */
+
 module.exports = {
+
     createGame,
+
     getPublicGame,
+
     getPrivatePlayerInfo
+
 };
