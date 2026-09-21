@@ -25,30 +25,16 @@ const {
  * ======================================================
  */
 
-const app =
-    express();
+const app = express();
 
-app.use(
-    express.json()
-);
+app.use(express.json());
 
-
-app.get(
-    "/",
-    (req, res) => {
-
-        res.json({
-
-            message:
-                "CS2 Undercover Server",
-
-            status:
-                "running"
-
-        });
-
-    }
-);
+app.get("/", (req, res) => {
+    res.json({
+        message: "CS2 Undercover Server",
+        status: "running"
+    });
+});
 
 
 /*
@@ -57,10 +43,7 @@ app.get(
  * ======================================================
  */
 
-const server =
-    http.createServer(
-        app
-    );
+const server = http.createServer(app);
 
 
 /*
@@ -69,94 +52,77 @@ const server =
  * ======================================================
  */
 
-const io =
-    new Server(
-        server,
-        {
-            cors: {
-
-                origin:
-                    "*",
-
-                methods: [
-                    "GET",
-                    "POST"
-                ]
-
-            }
-        }
-    );
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
 
-const PORT =
-    process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 
 /*
  * ======================================================
- * 客户端房间数据
+ * 房间公共信息
  * ======================================================
  */
 
-function getClientRoom(
-    room
-) {
-
-    const result =
-        getPublicRoom(
-            room
-        );
-
+function getClientRoom(room) {
+    const result = getPublicRoom(room);
 
     result.isTestRoom =
         room.isTestRoom === true;
 
-
     return result;
-
 }
 
 
 /*
  * ======================================================
- * 同步当前游戏玩家 socket ID
+ * 初始化房间附加数据
+ * ======================================================
+ */
+
+function ensureRoomData(room) {
+    if (!Array.isArray(room.departedPlayers)) {
+        room.departedPlayers = [];
+    }
+}
+
+
+/*
+ * ======================================================
+ * 同步当前游戏里的 socket ID
  * ======================================================
  */
 
 function syncGamePlayerSocketId(
     room,
-    name,
+    playerName,
     newSocketId
 ) {
-
     if (!room.currentGame) {
-
         return;
-
     }
-
 
     const gamePlayer =
         room.currentGame.players.find(
             player =>
-                player.name === name
+                player.name === playerName
         );
 
-
     if (!gamePlayer) {
-
         return;
-
     }
-
 
     const oldSocketId =
         gamePlayer.id;
 
-
     /*
-     * 如果投票已经开始，
-     * 一并迁移这个玩家原来的票。
+     * 如果已经投过票，
+     * 重连后把旧 socket 的票迁移到新 socket。
      */
 
     if (
@@ -164,10 +130,8 @@ function syncGamePlayerSocketId(
         room.currentGame.voting.votes &&
         oldSocketId !== newSocketId
     ) {
-
         const votes =
             room.currentGame.voting.votes;
-
 
         if (
             Object.prototype.hasOwnProperty.call(
@@ -175,20 +139,15 @@ function syncGamePlayerSocketId(
                 oldSocketId
             )
         ) {
-
             votes[newSocketId] =
                 votes[oldSocketId];
 
             delete votes[oldSocketId];
-
         }
-
     }
-
 
     gamePlayer.id =
         newSocketId;
-
 }
 
 
@@ -202,72 +161,38 @@ function restoreDepartedPlayer(
     room,
     socket
 ) {
-
-    if (
-        !Array.isArray(
-            room.departedPlayers
-        )
-    ) {
-
-        return null;
-
-    }
-
+    ensureRoomData(room);
 
     const index =
         room.departedPlayers.findIndex(
             player =>
-                player.name ===
-                socket.playerName
+                player.name === socket.playerName
         );
 
-
-    if (
-        index === -1
-    ) {
-
+    if (index === -1) {
         return null;
-
     }
-
 
     const oldPlayer =
         room.departedPlayers[index];
-
 
     room.departedPlayers.splice(
         index,
         1
     );
 
-
     const restoredPlayer = {
-
-        id:
-            socket.id,
-
-        name:
-            oldPlayer.name,
-
-        team:
-            oldPlayer.team || null,
-
-        role:
-            oldPlayer.role || null,
-
-        task:
-            oldPlayer.task || null,
-
-        isBot:
-            false
-
+        id: socket.id,
+        name: oldPlayer.name,
+        team: oldPlayer.team || null,
+        role: oldPlayer.role || null,
+        task: oldPlayer.task || null,
+        isBot: false
     };
-
 
     room.players.push(
         restoredPlayer
     );
-
 
     socket.roomCode =
         room.code;
@@ -275,11 +200,9 @@ function restoreDepartedPlayer(
     socket.playerName =
         restoredPlayer.name;
 
-
     socket.join(
         room.code
     );
-
 
     syncGamePlayerSocketId(
         room,
@@ -287,150 +210,179 @@ function restoreDepartedPlayer(
         socket.id
     );
 
-
     return restoredPlayer;
-
 }
 
 
 /*
  * ======================================================
- * 获取当前投票候选人
+ * 从当前游戏删除玩家
  * ======================================================
  */
 
-function getVotingCandidates(
-    room
+function removeCurrentGamePlayer(
+    room,
+    playerName
 ) {
+    if (!room.currentGame) {
+        return;
+    }
 
+    room.currentGame.players =
+        room.currentGame.players.filter(
+            player =>
+                player.name !== playerName
+        );
+
+
+    /*
+     * 如果正在投票，
+     * 同时清理他的候选资格和投票。
+     */
+
+    if (
+        room.currentGame.voting
+    ) {
+        const voting =
+            room.currentGame.voting;
+
+        /*
+         * 删除候选资格
+         */
+
+        voting.candidates =
+            voting.candidates.filter(
+                id => {
+                    return !(
+                        room.departedPlayers.some(
+                            player =>
+                                player.name ===
+                                playerName
+                        )
+                    );
+                }
+            );
+    }
+}
+
+
+/*
+ * ======================================================
+ * 当前投票候选人
+ * ======================================================
+ */
+
+function getVotingCandidates(room) {
     if (
         !room.currentGame ||
         !room.currentGame.voting
     ) {
-
         return [];
-
     }
-
 
     return (
         room.currentGame.voting.candidates ||
         []
     );
-
 }
 
 
 /*
  * ======================================================
- * 获取当前投票者
+ * 当前投票者
  * ======================================================
  *
- * 平票重投时：
- * 候选人不能投票。
+ * 第一轮：
+ * 所有人都可以投。
  *
+ * 重投：
+ * 并列最高票的人不能投。
+ *
+ * 如果全员都是候选人：
+ * 则没有人被排除，全员再次投。
  */
 
-function getEligibleVoters(
-    room
-) {
-
+function getEligibleVoters(room) {
     if (
         !room.currentGame ||
         !room.currentGame.voting
     ) {
-
         return [];
-
     }
 
+    const voting =
+        room.currentGame.voting;
 
-    const candidates =
-        getVotingCandidates(
-            room
-        );
+    const excludedVoters =
+        voting.excludedVoters ||
+        [];
 
 
     return room.players.filter(
         player => {
 
             /*
-             * 重投：
-             * 并列候选人不能投票
-             */
-
-            if (
-                candidates.includes(
-                    player.id
-                )
-            ) {
-
-                return false;
-
-            }
-
-
-            /*
-             * Bot 可以投。
-             *
-             * 真人要求在线。
-             *
-             * 这样掉线的人不会把整个投票卡死。
+             * Bot
              */
 
             if (
                 player.isBot === true
             ) {
-
-                return true;
-
+                return !excludedVoters.includes(
+                    player.id
+                );
             }
 
+
+            /*
+             * 玩家如果属于被排除的候选人，
+             * 不能参与重投。
+             */
+
+            if (
+                excludedVoters.includes(
+                    player.id
+                )
+            ) {
+                return false;
+            }
+
+
+            /*
+             * 真人必须在线。
+             */
 
             return Boolean(
                 io.sockets.sockets.get(
                     player.id
                 )
             );
-
         }
     );
-
 }
 
 
 /*
  * ======================================================
- * 获取投票公共状态
+ * 投票公共状态
  * ======================================================
- *
- * 不透露谁投了谁。
  */
 
 function getVotingPublicState(
     room,
     socket
 ) {
-
     const voting =
         room.currentGame.voting;
 
-
     const candidates =
-        getVotingCandidates(
-            room
-        );
-
+        getVotingCandidates(room);
 
     const eligibleVoters =
-        getEligibleVoters(
-            room
-        );
-
+        getEligibleVoters(room);
 
     const votes =
         voting.votes || {};
-
 
     const hasVoted =
         Object.prototype.hasOwnProperty.call(
@@ -438,17 +390,15 @@ function getVotingPublicState(
             socket.id
         );
 
-
     const canVote =
         eligibleVoters.some(
             player =>
-                player.id ===
-                socket.id
-        );
+                player.id === socket.id
+        ) &&
+        voting.processingTie !== true;
 
 
     return {
-
         round:
             voting.round,
 
@@ -456,8 +406,8 @@ function getVotingPublicState(
             voting.round > 1,
 
         candidates:
-            candidates.map(
-                candidateId => {
+            candidates
+                .map(candidateId => {
 
                     const player =
                         room.currentGame.players.find(
@@ -466,16 +416,11 @@ function getVotingPublicState(
                                 candidateId
                         );
 
-
                     if (!player) {
-
                         return null;
-
                     }
 
-
                     return {
-
                         id:
                             player.id,
 
@@ -484,16 +429,12 @@ function getVotingPublicState(
 
                         team:
                             player.team
-
                     };
-
-                }
-            ).filter(Boolean),
+                })
+                .filter(Boolean),
 
         votedCount:
-            Object.keys(
-                votes
-            ).length,
+            Object.keys(votes).length,
 
         voterCount:
             eligibleVoters.length,
@@ -502,16 +443,17 @@ function getVotingPublicState(
             hasVoted,
 
         canVote:
-            canVote
+            canVote,
 
+        processingTie:
+            voting.processingTie === true
     };
-
 }
 
 
 /*
  * ======================================================
- * 给指定玩家恢复当前投票
+ * 给指定玩家发送投票界面
  * ======================================================
  */
 
@@ -519,26 +461,19 @@ function sendVotingToSocket(
     socket,
     room
 ) {
-
     if (
         room.state !==
         "VOTING"
     ) {
-
         return;
-
     }
-
 
     if (
         !room.currentGame ||
         !room.currentGame.voting
     ) {
-
         return;
-
     }
-
 
     socket.emit(
         "voting_started",
@@ -547,56 +482,39 @@ function sendVotingToSocket(
             socket
         )
     );
-
 }
 
 
 /*
  * ======================================================
- * 自动给 Bot 投票
+ * Bot 自动投票
  * ======================================================
  */
 
-function autoBotVotes(
-    room
-) {
-
+function autoBotVotes(room) {
     if (
         !room.isTestRoom
     ) {
-
         return;
-
     }
-
 
     if (
         !room.currentGame ||
         !room.currentGame.voting
     ) {
-
         return;
-
     }
-
 
     const voting =
         room.currentGame.voting;
 
-
     const candidates =
-        getVotingCandidates(
-            room
-        );
-
+        getVotingCandidates(room);
 
     const eligibleBots =
-        getEligibleVoters(
-            room
-        ).filter(
+        getEligibleVoters(room).filter(
             player =>
-                player.isBot ===
-                true
+                player.isBot === true
         );
 
 
@@ -613,86 +531,124 @@ function autoBotVotes(
                     bot.id
                 )
             ) {
-
                 return;
-
             }
+
+
+            let choices = [];
 
 
             /*
              * 第一轮：
-             * 可以投任意其他玩家。
-             *
-             * 重投：
-             * 只能从候选人中选。
+             * 可以投任何其他玩家。
              */
 
-            let choices;
-
-
             if (
-                voting.round ===
-                1
+                voting.round === 1
             ) {
 
                 choices =
                     room.currentGame.players.filter(
-                        player =>
-                            player.id !==
-                            bot.id &&
-                            room.players.some(
-                                active =>
-                                    active.id ===
+                        player => {
+
+                            if (
+                                player.id ===
+                                bot.id
+                            ) {
+                                return false;
+                            }
+
+                            return room.players.some(
+                                activePlayer =>
+                                    activePlayer.id ===
                                     player.id
-                            )
+                            );
+                        }
                     );
 
             } else {
 
+                /*
+                 * 重投：
+                 * 只能投候选人。
+                 *
+                 * 但是不能投自己。
+                 */
+
                 choices =
                     room.currentGame.players.filter(
-                        player =>
-                            candidates.includes(
-                                player.id
-                            )
-                    );
+                        player => {
 
+                            if (
+                                player.id ===
+                                bot.id
+                            ) {
+                                return false;
+                            }
+
+                            return candidates.includes(
+                                player.id
+                            );
+                        }
+                    );
             }
 
 
             if (
-                choices.length ===
-                0
+                choices.length === 0
             ) {
-
                 return;
-
             }
 
 
-            const target =
-                choices[
-                    Math.floor(
-                        Math.random() *
-                        choices.length
-                    )
-                ];
+            /*
+             * 第一轮保持随机，
+             * 方便测试不同结果。
+             */
 
+            if (
+                voting.round === 1
+            ) {
 
-            voting.votes[
-                bot.id
-            ] =
-                target.id;
+                const target =
+                    choices[
+                        Math.floor(
+                            Math.random() *
+                            choices.length
+                        )
+                    ];
+
+                voting.votes[
+                    bot.id
+                ] =
+                    target.id;
+
+            } else {
+
+                /*
+                 * 重投改成确定性投票。
+                 *
+                 * 这样不会因为 Bot 随机再次造成
+                 * 无限平票。
+                 */
+
+                const target =
+                    choices[0];
+
+                voting.votes[
+                    bot.id
+                ] =
+                    target.id;
+            }
 
         }
     );
-
 }
 
 
 /*
  * ======================================================
- * 开始一轮投票
+ * 开始投票
  * ======================================================
  */
 
@@ -701,12 +657,77 @@ function startVotingRound(
     candidateIds,
     isRevote = false
 ) {
-
     if (!room.currentGame) {
-
         return;
-
     }
+
+
+    /*
+     * 过滤已经离开房间的人。
+     */
+
+    const activeCandidateIds =
+        candidateIds.filter(
+            id =>
+                room.players.some(
+                    player =>
+                        player.id === id
+                )
+        );
+
+
+    /*
+     * 如果候选人没了，
+     * 回退到当前所有玩家。
+     */
+
+    const finalCandidates =
+        activeCandidateIds.length > 0
+            ? activeCandidateIds
+            : room.players.map(
+                player =>
+                    player.id
+            );
+
+
+    /*
+     * 判断是否存在“其他玩家”
+     */
+
+    const hasOutsideVoters =
+        room.players.some(
+            player =>
+                !finalCandidates.includes(
+                    player.id
+                )
+        );
+
+
+    /*
+     * 普通重投：
+     * 候选人不能投。
+     *
+     * 全员平票：
+     * 没有其他玩家，
+     * 所以全员重新投。
+     */
+
+    const excludedVoters =
+        isRevote &&
+        hasOutsideVoters
+            ? [...finalCandidates]
+            : [];
+
+
+    const oldVoting =
+        room.currentGame.voting;
+
+
+    const nextRound =
+        isRevote &&
+        oldVoting
+            ? oldVoting.round + 1
+            : 1;
 
 
     room.state =
@@ -720,25 +741,24 @@ function startVotingRound(
     room.currentGame.voting = {
 
         round:
-            isRevote
-                ? (
-                    room.currentGame.voting
-                        ? room.currentGame.voting.round + 1
-                        : 2
-                )
-                : 1,
+            nextRound,
 
         candidates:
-            candidateIds,
+            finalCandidates,
+
+        excludedVoters:
+            excludedVoters,
 
         votes:
-            {}
+            {},
 
+        processingTie:
+            false
     };
 
 
     /*
-     * 给所有真实玩家发送投票界面
+     * 给真人发送投票界面。
      */
 
     room.players.forEach(
@@ -747,9 +767,7 @@ function startVotingRound(
             if (
                 player.isBot === true
             ) {
-
                 return;
-
             }
 
 
@@ -760,9 +778,7 @@ function startVotingRound(
 
 
             if (!playerSocket) {
-
                 return;
-
             }
 
 
@@ -776,7 +792,7 @@ function startVotingRound(
 
 
     /*
-     * 测试房间 Bot 自动投票
+     * 测试 Bot 自动投票
      */
 
     autoBotVotes(
@@ -785,19 +801,30 @@ function startVotingRound(
 
 
     /*
-     * Bot 投完以后检查
+     * 非递归检查。
+     *
+     * 重要：
+     * 不在这里直接 processVoting，
+     * 用 setTimeout 打断调用链。
      */
 
-    processVoting(
-        room
+    setTimeout(
+        () => {
+
+            processVoting(
+                room
+            );
+
+        },
+        0
     );
 
 
     console.log(
         `投票开始: ${room.code}, ` +
-        `第 ${room.currentGame.voting.round} 轮`
+        `第 ${nextRound} 轮, ` +
+        `候选人数: ${finalCandidates.length}`
     );
-
 }
 
 
@@ -807,13 +834,9 @@ function startVotingRound(
  * ======================================================
  */
 
-function countVotes(
-    room
-) {
-
+function countVotes(room) {
     const voting =
         room.currentGame.voting;
-
 
     const counts = {};
 
@@ -852,37 +875,28 @@ function countVotes(
 
 
     return counts;
-
 }
 
 
 /*
  * ======================================================
- * 投票结束后判定
+ * 处理投票
  * ======================================================
  */
 
-function processVoting(
-    room
-) {
-
+function processVoting(room) {
     if (
         room.state !==
         "VOTING"
     ) {
-
         return;
-
     }
-
 
     if (
         !room.currentGame ||
         !room.currentGame.voting
     ) {
-
         return;
-
     }
 
 
@@ -890,10 +904,20 @@ function processVoting(
         room.currentGame.voting;
 
 
+    /*
+     * 正在从平票切换到下一轮
+     */
+
+    if (
+        voting.processingTie ===
+        true
+    ) {
+        return;
+    }
+
+
     const eligibleVoters =
-        getEligibleVoters(
-            room
-        );
+        getEligibleVoters(room);
 
 
     const votedCount =
@@ -903,17 +927,13 @@ function processVoting(
 
 
     /*
-     * 还没有全部投票
+     * 还没全部投票
      */
 
     if (
         votedCount <
         eligibleVoters.length
     ) {
-
-        /*
-         * 更新进度
-         */
 
         room.players.forEach(
             player => {
@@ -922,9 +942,7 @@ function processVoting(
                     player.isBot ===
                     true
                 ) {
-
                     return;
-
                 }
 
 
@@ -935,9 +953,7 @@ function processVoting(
 
 
                 if (!playerSocket) {
-
                     return;
-
                 }
 
 
@@ -963,7 +979,6 @@ function processVoting(
 
 
         return;
-
     }
 
 
@@ -974,9 +989,7 @@ function processVoting(
      */
 
     const counts =
-        countVotes(
-            room
-        );
+        countVotes(room);
 
 
     const entries =
@@ -989,9 +1002,7 @@ function processVoting(
         entries.length ===
         0
     ) {
-
         return;
-
     }
 
 
@@ -1028,77 +1039,120 @@ function processVoting(
         1
     ) {
 
+        /*
+         * 标记正在切换，
+         * 防止这几百毫秒内又收票。
+         */
+
+        voting.processingTie =
+            true;
+
+
         console.log(
             `投票平票: ${room.code}, ` +
-            `候选人数: ${topCandidates.length}`
+            `第 ${voting.round} 轮`
         );
 
 
         /*
-         * 正常情况下：
-         *
-         * 候选人不能参加下一轮。
+         * 告诉玩家平票
          */
 
-        const eligibleOutside =
-            room.players.filter(
-                player =>
-                    !topCandidates.includes(
+        room.players.forEach(
+            player => {
+
+                if (
+                    player.isBot ===
+                    true
+                ) {
+                    return;
+                }
+
+
+                const playerSocket =
+                    io.sockets.sockets.get(
                         player.id
-                    )
-            );
+                    );
 
 
-        /*
-         * 极端情况：
-         * 所有人都是候选人。
-         *
-         * 这种情况下没有“其他人”可以投票，
-         * 为了避免游戏永久卡死，
-         * 让所有人重新参与一次投票。
-         */
-
-        let nextCandidates =
-            topCandidates;
+                if (!playerSocket) {
+                    return;
+                }
 
 
-        if (
-            eligibleOutside.length ===
-            0
-        ) {
+                playerSocket.emit(
+                    "vote_tie",
+                    {
+                        round:
+                            voting.round,
 
-            nextCandidates =
-                room.players.map(
-                    player =>
-                        player.id
+                        candidates:
+                            topCandidates,
+
+                        voteCounts:
+                            counts
+                    }
                 );
 
-        }
-
-
-        io.to(
-            room.code
-        ).emit(
-            "vote_tie",
-            {
-                candidates:
-                    topCandidates,
-
-                voteCounts:
-                    counts
             }
         );
 
 
-        startVotingRound(
-            room,
-            nextCandidates,
-            true
+        /*
+         * 延迟进入下一轮。
+         *
+         * 这一步彻底解决递归爆炸。
+         */
+
+        setTimeout(
+            () => {
+
+                const stillExists =
+                    topCandidates.some(
+                        candidateId =>
+                            room.players.some(
+                                player =>
+                                    player.id ===
+                                    candidateId
+                            )
+                    );
+
+
+                if (
+                    !stillExists
+                ) {
+
+                    /*
+                     * 候选人全都离开，
+                     * 回到所有当前玩家。
+                     */
+
+                    startVotingRound(
+                        room,
+                        room.players.map(
+                            player =>
+                                player.id
+                        ),
+                        true
+                    );
+
+                    return;
+
+                }
+
+
+                startVotingRound(
+                    room,
+                    topCandidates,
+                    true
+                );
+
+            },
+            700
         );
 
 
         return;
-
     }
 
 
@@ -1121,22 +1175,19 @@ function processVoting(
 
 
     if (!eliminatedPlayer) {
-
         return;
-
     }
 
 
     let winner =
         "SPY";
 
-
     let winnerText =
         "🕵️ 内鬼阵营胜利";
 
 
     /*
-     * 被投到呆呆鸟
+     * 呆呆鸟被投出
      */
 
     if (
@@ -1155,7 +1206,7 @@ function processVoting(
 
 
     /*
-     * 被投到内鬼
+     * 内鬼被投出
      */
 
     else if (
@@ -1174,7 +1225,7 @@ function processVoting(
 
 
     /*
-     * 被投到平民
+     * 平民被投出
      */
 
     else {
@@ -1190,7 +1241,9 @@ function processVoting(
 
 
     /*
+     * ==================================================
      * 保存投票结果
+     * ==================================================
      */
 
     room.currentGame.voting.result = {
@@ -1219,6 +1272,12 @@ function processVoting(
     };
 
 
+    /*
+     * ==================================================
+     * 进入揭晓
+     * ==================================================
+     */
+
     room.state =
         "REVEAL";
 
@@ -1226,10 +1285,6 @@ function processVoting(
     room.currentGame.state =
         "REVEAL";
 
-
-    /*
-     * 公开所有身份
-     */
 
     const result =
         getPublicGame(
@@ -1264,17 +1319,17 @@ function processVoting(
 
     console.log(
         `投票结束: ${room.code}, ` +
-        `淘汰: ${eliminatedPlayer.name}, ` +
+        `第 ${voting.round} 轮, ` +
+        `被投出: ${eliminatedPlayer.name}, ` +
         `身份: ${eliminatedPlayer.role}, ` +
         `结果: ${winnerText}`
     );
-
 }
 
 
 /*
  * ======================================================
- * 恢复当前游戏
+ * 给重连玩家恢复当前游戏
  * ======================================================
  */
 
@@ -1284,9 +1339,7 @@ function sendCurrentGameToSocket(
 ) {
 
     if (!room.currentGame) {
-
         return;
-
     }
 
 
@@ -1300,7 +1353,8 @@ function sendCurrentGameToSocket(
     ) {
 
         /*
-         * 测试房间可以看到全部身份
+         * 测试房间：
+         * 显示全部身份。
          */
 
         if (
@@ -1338,14 +1392,13 @@ function sendCurrentGameToSocket(
                     "private_role",
                     privateInfo
                 );
-
             }
-
 
         } else {
 
             /*
-             * 普通多人
+             * 普通多人：
+             * 只发送公开数据。
              */
 
             socket.emit(
@@ -1375,13 +1428,9 @@ function sendCurrentGameToSocket(
                         "private_role",
                         info
                     );
-
                 }
-
             }
-
         }
-
     }
 
 
@@ -1398,7 +1447,6 @@ function sendCurrentGameToSocket(
             socket,
             room
         );
-
     }
 
 
@@ -1437,29 +1485,22 @@ function sendCurrentGameToSocket(
             "game_finished",
             result
         );
-
     }
-
 }
 
 
 /*
  * ======================================================
- * 给所有真人发送私人身份
+ * 发送私人身份
  * ======================================================
  */
 
-function sendPrivateRoles(
-    room
-) {
-
+function sendPrivateRoles(room) {
     if (
         room.mode !==
         "UNDERCOVER"
     ) {
-
         return;
-
     }
 
 
@@ -1470,9 +1511,7 @@ function sendPrivateRoles(
                 player.isBot ===
                 true
             ) {
-
                 return;
-
             }
 
 
@@ -1483,9 +1522,7 @@ function sendPrivateRoles(
 
 
             if (!playerSocket) {
-
                 return;
-
             }
 
 
@@ -1502,12 +1539,10 @@ function sendPrivateRoles(
                     "private_role",
                     info
                 );
-
             }
 
         }
     );
-
 }
 
 
@@ -1558,7 +1593,6 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
@@ -1586,7 +1620,17 @@ io.on(
                         );
 
                         return;
+                    }
 
+
+                    if (!socket.connected) {
+
+                        socket.emit(
+                            "error_message",
+                            "服务器连接尚未建立"
+                        );
+
+                        return;
                     }
 
 
@@ -1633,6 +1677,7 @@ io.on(
                     socket.roomCode =
                         room.code;
 
+
                     socket.playerName =
                         playerName;
 
@@ -1657,9 +1702,7 @@ io.on(
 
 
                     console.log(
-                        `房间创建成功: ${room.code}, ` +
-                        `模式: ${room.mode}, ` +
-                        `人数: ${room.maxPlayers}`
+                        `创建房间: ${room.code}`
                     );
 
                 } catch (error) {
@@ -1683,7 +1726,7 @@ io.on(
 
         /*
          * ==================================================
-         * 单人测试房间
+         * 创建单人测试房间
          * ==================================================
          */
 
@@ -1712,7 +1755,6 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
@@ -1740,7 +1782,6 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
@@ -1826,6 +1867,7 @@ io.on(
                     socket.roomCode =
                         room.code;
 
+
                     socket.playerName =
                         playerName;
 
@@ -1850,9 +1892,7 @@ io.on(
 
 
                     console.log(
-                        `单人测试房间创建成功: ${room.code}, ` +
-                        `模式: ${room.mode}, ` +
-                        `人数: ${room.maxPlayers}`
+                        `测试房间: ${room.code}`
                     );
 
                 } catch (error) {
@@ -1876,7 +1916,7 @@ io.on(
 
         /*
          * ==================================================
-         * 自动重连
+         * 重连
          * ==================================================
          */
 
@@ -1904,7 +1944,6 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
@@ -1922,7 +1961,6 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
@@ -1930,22 +1968,18 @@ io.on(
                         name;
 
 
-                    const player =
+                    const existing =
                         room.players.find(
-                            p =>
-                                p.name ===
+                            player =>
+                                player.name ===
                                 name
                         );
 
 
-                    /*
-                     * 玩家已经在活跃列表
-                     */
-
-                    if (player) {
+                    if (existing) {
 
                         if (
-                            player.isBot ===
+                            existing.isBot ===
                             true
                         ) {
 
@@ -1955,11 +1989,10 @@ io.on(
                             );
 
                             return;
-
                         }
 
 
-                        player.id =
+                        existing.id =
                             socket.id;
 
 
@@ -1968,7 +2001,7 @@ io.on(
 
 
                         socket.playerName =
-                            player.name;
+                            existing.name;
 
 
                         socket.join(
@@ -1978,27 +2011,21 @@ io.on(
 
                         if (
                             room.hostName ===
-                            player.name
+                            existing.name
                         ) {
 
                             room.hostId =
                                 socket.id;
-
                         }
 
 
                         syncGamePlayerSocketId(
                             room,
-                            player.name,
+                            existing.name,
                             socket.id
                         );
 
-
                     } else {
-
-                        /*
-                         * 尝试从离开列表恢复
-                         */
 
                         const restored =
                             restoreDepartedPlayer(
@@ -2015,9 +2042,7 @@ io.on(
                             );
 
                             return;
-
                         }
-
                     }
 
 
@@ -2042,8 +2067,7 @@ io.on(
 
 
                     console.log(
-                        `玩家重连成功: ${name}, ` +
-                        `房间: ${room.code}`
+                        `重连成功: ${name}, ${room.code}`
                     );
 
                 } catch (error) {
@@ -2096,7 +2120,6 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
@@ -2122,7 +2145,6 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
@@ -2131,7 +2153,7 @@ io.on(
 
 
                     /*
-                     * 优先尝试恢复离开玩家
+                     * 先尝试恢复离开的人
                      */
 
                     const restored =
@@ -2163,22 +2185,15 @@ io.on(
                         );
 
 
-                        console.log(
-                            `离开后重新加入: ${playerName}, ` +
-                            `房间: ${room.code}`
-                        );
-
-
                         return;
-
                     }
 
 
                     /*
-                     * 已经存在的玩家
+                     * 已经存在
                      */
 
-                    const existingPlayer =
+                    const existing =
                         room.players.find(
                             player =>
                                 player.name ===
@@ -2186,10 +2201,10 @@ io.on(
                         );
 
 
-                    if (existingPlayer) {
+                    if (existing) {
 
                         if (
-                            existingPlayer.isBot ===
+                            existing.isBot ===
                             true
                         ) {
 
@@ -2199,19 +2214,19 @@ io.on(
                             );
 
                             return;
-
                         }
 
 
-                        existingPlayer.id =
+                        existing.id =
                             socket.id;
 
 
                         socket.roomCode =
                             room.code;
 
+
                         socket.playerName =
-                            existingPlayer.name;
+                            existing.name;
 
 
                         socket.join(
@@ -2221,18 +2236,17 @@ io.on(
 
                         if (
                             room.hostName ===
-                            existingPlayer.name
+                            existing.name
                         ) {
 
                             room.hostId =
                                 socket.id;
-
                         }
 
 
                         syncGamePlayerSocketId(
                             room,
-                            existingPlayer.name,
+                            existing.name,
                             socket.id
                         );
 
@@ -2258,12 +2272,11 @@ io.on(
 
 
                         return;
-
                     }
 
 
                     /*
-                     * 新玩家只能加入等待中的普通房间
+                     * 新玩家只能加入等待状态
                      */
 
                     if (
@@ -2273,11 +2286,10 @@ io.on(
 
                         socket.emit(
                             "error_message",
-                            "游戏已经开始，新玩家不能加入这个房间；原玩家请使用原昵称重新加入"
+                            "游戏已经开始，新玩家不能加入；原玩家请使用原昵称重新加入"
                         );
 
                         return;
-
                     }
 
 
@@ -2285,7 +2297,6 @@ io.on(
                         addPlayer(
                             room,
                             {
-
                                 id:
                                     socket.id,
 
@@ -2303,7 +2314,6 @@ io.on(
 
                                 isBot:
                                     false
-
                             }
                         );
 
@@ -2318,12 +2328,12 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
                     socket.roomCode =
                         room.code;
+
 
                     socket.playerName =
                         playerName;
@@ -2345,12 +2355,6 @@ io.on(
                     ).emit(
                         "room_update",
                         getClientRoom(room)
-                    );
-
-
-                    console.log(
-                        `玩家加入: ${playerName}, ` +
-                        `房间: ${room.code}`
                     );
 
                 } catch (error) {
@@ -2390,17 +2394,11 @@ io.on(
                         );
 
 
-                    if (!room) {
-
+                    if (
+                        !room ||
+                        !room.currentGame
+                    ) {
                         return;
-
-                    }
-
-
-                    if (!room.currentGame) {
-
-                        return;
-
                     }
 
 
@@ -2417,7 +2415,6 @@ io.on(
                             "private_role",
                             info
                         );
-
                     }
 
                 } catch (error) {
@@ -2426,7 +2423,6 @@ io.on(
                         "request_private_role 错误:",
                         error
                     );
-
                 }
 
             }
@@ -2459,7 +2455,6 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
@@ -2474,7 +2469,6 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
@@ -2489,7 +2483,6 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
@@ -2510,604 +2503,10 @@ io.on(
                         );
 
                         return;
-
                     }
 
 
                     room.round =
-                        1;
-
-
-                    room.currentGame =
-                        createGame(
-                            room.players,
-                            room.round,
-                            room.mode
-                        );
-
-
-                    room.state =
-                        "PLAYING";
-
-
-                    /*
-                     * 测试房间
-                     */
-
-                    if (
-                        room.isTestRoom ===
-                        true
-                    ) {
-
-                        const testGame =
-                            getPublicGame(
-                                room.currentGame,
-                                true
-                            );
-
-
-                        testGame.isTestRoom =
-                            true;
-
-
-                        socket.emit(
-                            "game_started",
-                            testGame
-                        );
-
-
-                        const privateInfo =
-                            getPrivatePlayerInfo(
-                                room.currentGame,
-                                socket.id
-                            );
-
-
-                        if (privateInfo) {
-
-                            socket.emit(
-                                "private_role",
-                                privateInfo
-                            );
-
-                        }
-
-                    } else {
-
-                        /*
-                         * 普通多人
-                         */
-
-                        io.to(
-                            room.code
-                        ).emit(
-                            "game_started",
-                            getPublicGame(
-                                room.currentGame,
-                                false
-                            )
-                        );
-
-
-                        sendPrivateRoles(
-                            room
-                        );
-
-                    }
-
-
-                    console.log(
-                        `游戏开始: ${room.code}, ` +
-                        `第 ${room.round} 局`
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        "start_game 错误:",
-                        error
-                    );
-
-
-                    socket.emit(
-                        "error_message",
-                        "开始游戏失败"
-                    );
-
-                }
-
-            }
-        );
-
-
-        /*
-         * ==================================================
-         * 结束本局 / 开始投票
-         * ==================================================
-         */
-
-        socket.on(
-            "finish_game",
-            () => {
-
-                try {
-
-                    const room =
-                        getRoom(
-                            socket.roomCode
-                        );
-
-
-                    if (!room) {
-
-                        socket.emit(
-                            "error_message",
-                            "房间不存在"
-                        );
-
-                        return;
-
-                    }
-
-
-                    if (
-                        room.hostId !==
-                        socket.id
-                    ) {
-
-                        socket.emit(
-                            "error_message",
-                            "只有房主可以开始投票"
-                        );
-
-                        return;
-
-                    }
-
-
-                    if (
-                        room.state !==
-                        "PLAYING"
-                    ) {
-
-                        socket.emit(
-                            "error_message",
-                            "当前不是游戏进行阶段"
-                        );
-
-                        return;
-
-                    }
-
-
-                    /*
-                     * 分组模式：
-                     * 没有身份，不需要投票
-                     */
-
-                    if (
-                        room.mode ===
-                        "TEAM"
-                    ) {
-
-                        room.state =
-                            "REVEAL";
-
-
-                        room.currentGame.state =
-                            "REVEAL";
-
-
-                        const result =
-                            getPublicGame(
-                                room.currentGame,
-                                true
-                            );
-
-
-                        result.isTestRoom =
-                            room.isTestRoom === true;
-
-
-                        io.to(
-                            room.code
-                        ).emit(
-                            "room_update",
-                            getClientRoom(room)
-                        );
-
-
-                        io.to(
-                            room.code
-                        ).emit(
-                            "game_finished",
-                            result
-                        );
-
-
-                        console.log(
-                            `分组游戏结束: ${room.code}`
-                        );
-
-
-                        return;
-
-                    }
-
-
-                    /*
-                     * 内鬼模式开始第一轮投票
-                     */
-
-                    const candidateIds =
-                        room.players.map(
-                            player =>
-                                player.id
-                        );
-
-
-                    startVotingRound(
-                        room,
-                        candidateIds,
-                        false
-                    );
-
-
-                } catch (error) {
-
-                    console.error(
-                        "finish_game 错误:",
-                        error
-                    );
-
-
-                    socket.emit(
-                        "error_message",
-                        "开始投票失败"
-                    );
-
-                }
-
-            }
-        );
-
-
-        /*
-         * ==================================================
-         * 玩家投票
-         * ==================================================
-         */
-
-        socket.on(
-            "cast_vote",
-            data => {
-
-                try {
-
-                    const room =
-                        getRoom(
-                            socket.roomCode
-                        );
-
-
-                    if (!room) {
-
-                        socket.emit(
-                            "vote_error",
-                            "房间不存在"
-                        );
-
-                        return;
-
-                    }
-
-
-                    if (
-                        room.state !==
-                        "VOTING"
-                    ) {
-
-                        socket.emit(
-                            "vote_error",
-                            "当前不是投票阶段"
-                        );
-
-                        return;
-
-                    }
-
-
-                    if (
-                        !room.currentGame ||
-                        !room.currentGame.voting
-                    ) {
-
-                        socket.emit(
-                            "vote_error",
-                            "投票数据不存在"
-                        );
-
-                        return;
-
-                    }
-
-
-                    const targetId =
-                        data &&
-                        data.targetId;
-
-
-                    if (!targetId) {
-
-                        socket.emit(
-                            "vote_error",
-                            "请选择投票对象"
-                        );
-
-                        return;
-
-                    }
-
-
-                    const voting =
-                        room.currentGame.voting;
-
-
-                    const candidates =
-                        getVotingCandidates(
-                            room
-                        );
-
-
-                    const eligibleVoters =
-                        getEligibleVoters(
-                            room
-                        );
-
-
-                    /*
-                     * 检查投票资格
-                     */
-
-                    if (
-                        !eligibleVoters.some(
-                            player =>
-                                player.id ===
-                                socket.id
-                        )
-                    ) {
-
-                        socket.emit(
-                            "vote_error",
-                            "你没有本轮投票资格"
-                        );
-
-                        return;
-
-                    }
-
-
-                    /*
-                     * 每个人每轮只能投一次
-                     */
-
-                    if (
-                        Object.prototype.hasOwnProperty.call(
-                            voting.votes,
-                            socket.id
-                        )
-                    ) {
-
-                        socket.emit(
-                            "vote_error",
-                            "你已经投过票了"
-                        );
-
-                        return;
-
-                    }
-
-
-                    /*
-                     * 第一轮不能投自己
-                     */
-
-                    if (
-                        voting.round ===
-                        1 &&
-                        targetId ===
-                        socket.id
-                    ) {
-
-                        socket.emit(
-                            "vote_error",
-                            "不能投自己"
-                        );
-
-                        return;
-
-                    }
-
-
-                    /*
-                     * 重投时：
-                     * 只能投候选人
-                     */
-
-                    if (
-                        voting.round >
-                        1 &&
-                        !candidates.includes(
-                            targetId
-                        )
-                    ) {
-
-                        socket.emit(
-                            "vote_error",
-                            "重投只能选择上一轮平票候选人"
-                        );
-
-                        return;
-
-                    }
-
-
-                    /*
-                     * 检查目标确实存在
-                     */
-
-                    const targetPlayer =
-                        room.currentGame.players.find(
-                            player =>
-                                player.id ===
-                                targetId
-                        );
-
-
-                    if (!targetPlayer) {
-
-                        socket.emit(
-                            "vote_error",
-                            "投票对象不存在"
-                        );
-
-                        return;
-
-                    }
-
-
-                    /*
-                     * 写入票
-                     */
-
-                    voting.votes[
-                        socket.id
-                    ] =
-                        targetId;
-
-
-                    /*
-                     * 告诉投票者成功
-                     */
-
-                    socket.emit(
-                        "vote_submitted",
-                        {
-                            targetId:
-                                targetId
-                        }
-                    );
-
-
-                    /*
-                     * 检查是否已经全部投完
-                     */
-
-                    processVoting(
-                        room
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        "cast_vote 错误:",
-                        error
-                    );
-
-
-                    socket.emit(
-                        "vote_error",
-                        "投票失败"
-                    );
-
-                }
-
-            }
-        );
-
-
-        /*
-         * ==================================================
-         * 下一局
-         * ==================================================
-         */
-
-        socket.on(
-            "next_round",
-            () => {
-
-                try {
-
-                    const room =
-                        getRoom(
-                            socket.roomCode
-                        );
-
-
-                    if (!room) {
-
-                        socket.emit(
-                            "error_message",
-                            "房间不存在"
-                        );
-
-                        return;
-
-                    }
-
-
-                    if (
-                        room.hostId !==
-                        socket.id
-                    ) {
-
-                        socket.emit(
-                            "error_message",
-                            "只有房主可以开始下一局"
-                        );
-
-                        return;
-
-                    }
-
-
-                    if (
-                        room.state !==
-                        "REVEAL"
-                    ) {
-
-                        socket.emit(
-                            "error_message",
-                            "当前不能开始下一局"
-                        );
-
-                        return;
-
-                    }
-
-
-                    const maxPlayers =
-                        getMaxPlayers(
-                            room
-                        );
-
-
-                    if (
-                        room.players.length !==
-                        maxPlayers
-                    ) {
-
-                        socket.emit(
-                            "error_message",
-                            `需要 ${maxPlayers} 人才能开始下一局`
-                        );
-
-                        return;
-
-                    }
-
-
-                    room.round +=
                         1;
 
 
@@ -3162,7 +2561,6 @@ io.on(
                                 "private_role",
                                 privateInfo
                             );
-
                         }
 
                     } else {
@@ -3181,7 +2579,568 @@ io.on(
                         sendPrivateRoles(
                             room
                         );
+                    }
 
+                } catch (error) {
+
+                    console.error(
+                        "start_game 错误:",
+                        error
+                    );
+
+
+                    socket.emit(
+                        "error_message",
+                        "开始游戏失败"
+                    );
+
+                }
+
+            }
+        );
+
+
+        /*
+         * ==================================================
+         * 结束当前游戏
+         * ==================================================
+         */
+
+        socket.on(
+            "finish_game",
+            () => {
+
+                try {
+
+                    const room =
+                        getRoom(
+                            socket.roomCode
+                        );
+
+
+                    if (!room) {
+
+                        socket.emit(
+                            "error_message",
+                            "房间不存在"
+                        );
+
+                        return;
+                    }
+
+
+                    if (
+                        room.hostId !==
+                        socket.id
+                    ) {
+
+                        socket.emit(
+                            "error_message",
+                            "只有房主可以开始投票"
+                        );
+
+                        return;
+                    }
+
+
+                    if (
+                        room.state !==
+                        "PLAYING"
+                    ) {
+
+                        socket.emit(
+                            "error_message",
+                            "当前不能结束游戏"
+                        );
+
+                        return;
+                    }
+
+
+                    /*
+                     * 分组模式：
+                     * 没有身份胜负，
+                     * 直接揭晓分组。
+                     */
+
+                    if (
+                        room.mode ===
+                        "TEAM"
+                    ) {
+
+                        room.state =
+                            "REVEAL";
+
+
+                        room.currentGame.state =
+                            "REVEAL";
+
+
+                        const result =
+                            getPublicGame(
+                                room.currentGame,
+                                true
+                            );
+
+
+                        result.isTestRoom =
+                            room.isTestRoom === true;
+
+
+                        io.to(
+                            room.code
+                        ).emit(
+                            "room_update",
+                            getClientRoom(room)
+                        );
+
+
+                        io.to(
+                            room.code
+                        ).emit(
+                            "game_finished",
+                            result
+                        );
+
+
+                        return;
+                    }
+
+
+                    /*
+                     * 内鬼模式：
+                     * 开始第一轮投票。
+                     */
+
+                    const candidateIds =
+                        room.players.map(
+                            player =>
+                                player.id
+                        );
+
+
+                    startVotingRound(
+                        room,
+                        candidateIds,
+                        false
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "finish_game 错误:",
+                        error
+                    );
+
+
+                    socket.emit(
+                        "error_message",
+                        "开始投票失败"
+                    );
+
+                }
+
+            }
+        );
+
+
+        /*
+         * ==================================================
+         * 玩家投票
+         * ==================================================
+         */
+
+        socket.on(
+            "cast_vote",
+            data => {
+
+                try {
+
+                    const room =
+                        getRoom(
+                            socket.roomCode
+                        );
+
+
+                    if (!room) {
+
+                        socket.emit(
+                            "vote_error",
+                            "房间不存在"
+                        );
+
+                        return;
+                    }
+
+
+                    if (
+                        room.state !==
+                        "VOTING"
+                    ) {
+
+                        socket.emit(
+                            "vote_error",
+                            "当前不是投票阶段"
+                        );
+
+                        return;
+                    }
+
+
+                    if (
+                        !room.currentGame ||
+                        !room.currentGame.voting
+                    ) {
+
+                        socket.emit(
+                            "vote_error",
+                            "投票数据不存在"
+                        );
+
+                        return;
+                    }
+
+
+                    const voting =
+                        room.currentGame.voting;
+
+
+                    if (
+                        voting.processingTie ===
+                        true
+                    ) {
+
+                        socket.emit(
+                            "vote_error",
+                            "正在准备重新投票，请稍等"
+                        );
+
+                        return;
+                    }
+
+
+                    const targetId =
+                        data &&
+                        data.targetId;
+
+
+                    if (!targetId) {
+
+                        socket.emit(
+                            "vote_error",
+                            "请选择投票对象"
+                        );
+
+                        return;
+                    }
+
+
+                    /*
+                     * 检查本人是否有投票资格
+                     */
+
+                    const eligibleVoters =
+                        getEligibleVoters(room);
+
+
+                    if (
+                        !eligibleVoters.some(
+                            player =>
+                                player.id ===
+                                socket.id
+                        )
+                    ) {
+
+                        socket.emit(
+                            "vote_error",
+                            "你没有本轮投票资格"
+                        );
+
+                        return;
+                    }
+
+
+                    /*
+                     * 一人一票
+                     */
+
+                    if (
+                        Object.prototype.hasOwnProperty.call(
+                            voting.votes,
+                            socket.id
+                        )
+                    ) {
+
+                        socket.emit(
+                            "vote_error",
+                            "你已经投过票了"
+                        );
+
+                        return;
+                    }
+
+
+                    /*
+                     * 不能投自己
+                     */
+
+                    if (
+                        targetId ===
+                        socket.id
+                    ) {
+
+                        socket.emit(
+                            "vote_error",
+                            "不能投自己"
+                        );
+
+                        return;
+                    }
+
+
+                    /*
+                     * 检查目标
+                     */
+
+                    const targetPlayer =
+                        room.currentGame.players.find(
+                            player =>
+                                player.id ===
+                                targetId
+                        );
+
+
+                    if (!targetPlayer) {
+
+                        socket.emit(
+                            "vote_error",
+                            "投票对象不存在"
+                        );
+
+                        return;
+                    }
+
+
+                    /*
+                     * 重投只能投候选人
+                     */
+
+                    if (
+                        voting.round >
+                        1 &&
+                        !voting.candidates.includes(
+                            targetId
+                        )
+                    ) {
+
+                        socket.emit(
+                            "vote_error",
+                            "重投只能选择上一轮平票候选人"
+                        );
+
+                        return;
+                    }
+
+
+                    /*
+                     * 写入投票
+                     */
+
+                    voting.votes[
+                        socket.id
+                    ] =
+                        targetId;
+
+
+                    socket.emit(
+                        "vote_submitted",
+                        {
+                            targetId:
+                                targetId
+                        }
+                    );
+
+
+                    /*
+                     * 检查是否结束
+                     */
+
+                    setTimeout(
+                        () => {
+
+                            processVoting(
+                                room
+                            );
+
+                        },
+                        0
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "cast_vote 错误:",
+                        error
+                    );
+
+
+                    socket.emit(
+                        "vote_error",
+                        "投票失败"
+                    );
+
+                }
+
+            }
+        );
+
+
+        /*
+         * ==================================================
+         * 下一局
+         * ==================================================
+         */
+
+        socket.on(
+            "next_round",
+            () => {
+
+                try {
+
+                    const room =
+                        getRoom(
+                            socket.roomCode
+                        );
+
+
+                    if (!room) {
+
+                        socket.emit(
+                            "error_message",
+                            "房间不存在"
+                        );
+
+                        return;
+                    }
+
+
+                    if (
+                        room.hostId !==
+                        socket.id
+                    ) {
+
+                        socket.emit(
+                            "error_message",
+                            "只有房主可以开始下一局"
+                        );
+
+                        return;
+                    }
+
+
+                    if (
+                        room.state !==
+                        "REVEAL"
+                    ) {
+
+                        socket.emit(
+                            "error_message",
+                            "当前不能开始下一局"
+                        );
+
+                        return;
+                    }
+
+
+                    const maxPlayers =
+                        getMaxPlayers(
+                            room
+                        );
+
+
+                    if (
+                        room.players.length !==
+                        maxPlayers
+                    ) {
+
+                        socket.emit(
+                            "error_message",
+                            `需要 ${maxPlayers} 人才能开始下一局`
+                        );
+
+                        return;
+                    }
+
+
+                    room.round +=
+                        1;
+
+
+                    room.currentGame =
+                        createGame(
+                            room.players,
+                            room.round,
+                            room.mode
+                        );
+
+
+                    room.state =
+                        "PLAYING";
+
+
+                    if (
+                        room.isTestRoom ===
+                        true
+                    ) {
+
+                        const testGame =
+                            getPublicGame(
+                                room.currentGame,
+                                true
+                            );
+
+
+                        testGame.isTestRoom =
+                            true;
+
+
+                        socket.emit(
+                            "game_started",
+                            testGame
+                        );
+
+
+                        const privateInfo =
+                            getPrivatePlayerInfo(
+                                room.currentGame,
+                                socket.id
+                            );
+
+
+                        if (privateInfo) {
+
+                            socket.emit(
+                                "private_role",
+                                privateInfo
+                            );
+                        }
+
+                    } else {
+
+                        io.to(
+                            room.code
+                        ).emit(
+                            "game_started",
+                            getPublicGame(
+                                room.currentGame,
+                                false
+                            )
+                        );
+
+
+                        sendPrivateRoles(
+                            room
+                        );
                     }
 
 
@@ -3190,12 +3149,6 @@ io.on(
                     ).emit(
                         "room_update",
                         getClientRoom(room)
-                    );
-
-
-                    console.log(
-                        `下一局开始: ${room.code}, ` +
-                        `第 ${room.round} 局`
                     );
 
                 } catch (error) {
@@ -3221,22 +3174,13 @@ io.on(
          * ==================================================
          * 主动退出房间
          * ==================================================
-         *
-         * 房主：
-         * 关闭整个房间。
-         *
-         * 普通玩家：
-         * 从当前房间移除，
-         * 但保存在 departedPlayers，
-         * 以后可以重新加入。
          */
 
         socket.on(
             "leave_room",
             (data, maybeCallback) => {
 
-                let callback =
-                    null;
+                let callback = null;
 
 
                 if (
@@ -3254,7 +3198,6 @@ io.on(
 
                     callback =
                         data;
-
                 }
 
 
@@ -3267,8 +3210,7 @@ io.on(
                     if (!roomCode) {
 
                         if (
-                            typeof callback ===
-                            "function"
+                            callback
                         ) {
 
                             callback({
@@ -3279,7 +3221,6 @@ io.on(
                         }
 
                         return;
-
                     }
 
 
@@ -3299,8 +3240,7 @@ io.on(
 
 
                         if (
-                            typeof callback ===
-                            "function"
+                            callback
                         ) {
 
                             callback({
@@ -3311,7 +3251,6 @@ io.on(
                         }
 
                         return;
-
                     }
 
 
@@ -3333,8 +3272,7 @@ io.on(
 
 
                         if (
-                            typeof callback ===
-                            "function"
+                            callback
                         ) {
 
                             callback({
@@ -3345,7 +3283,6 @@ io.on(
                         }
 
                         return;
-
                     }
 
 
@@ -3355,9 +3292,8 @@ io.on(
 
 
                     /*
-                     * ======================================
-                     * 房主退出
-                     * ======================================
+                     * 房主退出：
+                     * 整个房间关闭。
                      */
 
                     if (wasHost) {
@@ -3366,10 +3302,6 @@ io.on(
                             `房主退出，关闭房间: ${roomCode}`
                         );
 
-
-                        /*
-                         * 通知其他玩家
-                         */
 
                         io.to(
                             roomCode
@@ -3381,10 +3313,6 @@ io.on(
                             }
                         );
 
-
-                        /*
-                         * 所有人退出 Socket.IO 房间
-                         */
 
                         const socketIds =
                             io.sockets.adapter.rooms.get(
@@ -3437,8 +3365,7 @@ io.on(
 
 
                         if (
-                            typeof callback ===
-                            "function"
+                            callback
                         ) {
 
                             callback({
@@ -3450,26 +3377,15 @@ io.on(
 
 
                         return;
-
                     }
 
 
                     /*
-                     * ======================================
-                     * 普通玩家离开
-                     * ======================================
+                     * 普通玩家退出：
+                     * 保存起来以后可以重新加入。
                      */
 
-                    if (
-                        !Array.isArray(
-                            room.departedPlayers
-                        )
-                    ) {
-
-                        room.departedPlayers =
-                            [];
-
-                    }
+                    ensureRoomData(room);
 
 
                     room.departedPlayers.push({
@@ -3493,8 +3409,8 @@ io.on(
 
 
                     /*
-                     * 投票中退出：
-                     * 删除这名玩家已经投出的票。
+                     * 如果正在投票，
+                     * 删除这名玩家的投票。
                      */
 
                     if (
@@ -3502,9 +3418,69 @@ io.on(
                         room.currentGame.voting
                     ) {
 
-                        delete room.currentGame.voting.votes[
+                        const voting =
+                            room.currentGame.voting;
+
+
+                        delete voting.votes[
                             socket.id
                         ];
+
+
+                        /*
+                         * 删除他的候选资格
+                         */
+
+                        voting.candidates =
+                            voting.candidates.filter(
+                                id =>
+                                    id !==
+                                    socket.id
+                            );
+
+
+                        /*
+                         * 删除别人投给他的票
+                         */
+
+                        Object.keys(
+                            voting.votes
+                        ).forEach(
+                            voterId => {
+
+                                if (
+                                    voting.votes[
+                                        voterId
+                                    ] ===
+                                    socket.id
+                                ) {
+
+                                    delete voting.votes[
+                                        voterId
+                                    ];
+
+                                }
+
+                            }
+                        );
+
+                    }
+
+
+                    /*
+                     * 当前游戏也删除
+                     */
+
+                    if (
+                        room.currentGame
+                    ) {
+
+                        room.currentGame.players =
+                            room.currentGame.players.filter(
+                                gamePlayer =>
+                                    gamePlayer.name !==
+                                    player.name
+                            );
 
                     }
 
@@ -3535,15 +3511,32 @@ io.on(
                     );
 
 
-                    console.log(
-                        `普通玩家退出: ${player.name}, ` +
-                        `房间: ${roomCode}`
-                    );
+                    /*
+                     * 如果正在投票，
+                     * 重新计算一次。
+                     */
+
+                    if (
+                        room.state ===
+                        "VOTING"
+                    ) {
+
+                        setTimeout(
+                            () => {
+
+                                processVoting(
+                                    room
+                                );
+
+                            },
+                            0
+                        );
+
+                    }
 
 
                     if (
-                        typeof callback ===
-                        "function"
+                        callback
                     ) {
 
                         callback({
@@ -3562,18 +3555,15 @@ io.on(
 
 
                     if (
-                        typeof callback ===
-                        "function"
+                        callback
                     ) {
 
                         callback({
-
                             success:
                                 false,
 
                             message:
                                 "退出房间失败"
-
                         });
 
                     }
@@ -3586,12 +3576,13 @@ io.on(
 
         /*
          * ==================================================
-         * 玩家掉线
+         * 掉线
          * ==================================================
          *
          * 不删除玩家。
          *
-         * 玩家回来以后继续原房间。
+         * 如果正在投票，
+         * 掉线的人不再阻塞投票。
          */
 
         socket.on(
@@ -3599,11 +3590,42 @@ io.on(
             () => {
 
                 console.log(
-                    "玩家断开连接:",
+                    "玩家断开:",
                     socket.id,
-                    "昵称:",
                     socket.playerName || "未知"
                 );
+
+
+                const room =
+                    getRoom(
+                        socket.roomCode
+                    );
+
+
+                if (
+                    !room
+                ) {
+                    return;
+                }
+
+
+                if (
+                    room.state ===
+                    "VOTING"
+                ) {
+
+                    setTimeout(
+                        () => {
+
+                            processVoting(
+                                room
+                            );
+
+                        },
+                        0
+                    );
+
+                }
 
             }
         );
