@@ -369,7 +369,7 @@ function createGame(
      */
 
     const DODO_TASK =
-        "让自己的队友认为自己是内鬼并把自己投出去。你的任务是假的。";
+        "让自己的队友认为自己是内鬼并把自己投出去。";
 
 
     players.forEach(
