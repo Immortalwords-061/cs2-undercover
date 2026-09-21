@@ -39,18 +39,11 @@ app.get("/", (req, res) => {
 
 /*
  * ======================================================
- * HTTP
+ * HTTP / Socket.IO
  * ======================================================
  */
 
 const server = http.createServer(app);
-
-
-/*
- * ======================================================
- * Socket.IO
- * ======================================================
- */
 
 const io = new Server(server, {
     cors: {
@@ -59,18 +52,19 @@ const io = new Server(server, {
     }
 });
 
-
-const PORT = process.env.PORT || 3000;
+const PORT =
+    process.env.PORT || 3000;
 
 
 /*
  * ======================================================
- * 房间公共信息
+ * 房间公共数据
  * ======================================================
  */
 
 function getClientRoom(room) {
-    const result = getPublicRoom(room);
+    const result =
+        getPublicRoom(room);
 
     result.isTestRoom =
         room.isTestRoom === true;
@@ -81,79 +75,71 @@ function getClientRoom(room) {
 
 /*
  * ======================================================
- * 初始化房间附加数据
+ * 初始化附加房间数据
  * ======================================================
  */
 
 function ensureRoomData(room) {
-    if (!Array.isArray(room.departedPlayers)) {
-        room.departedPlayers = [];
+
+    if (
+        !Array.isArray(
+            room.departedPlayers
+        )
+    ) {
+
+        room.departedPlayers =
+            [];
+
     }
+
 }
 
 
 /*
  * ======================================================
- * 同步当前游戏里的 socket ID
+ * 同步游戏玩家 socket
  * ======================================================
  */
 
 function syncGamePlayerSocketId(
     room,
     playerName,
-    newSocketId
+    socketId
 ) {
-    if (!room.currentGame) {
+
+    if (
+        !room.currentGame
+    ) {
+
         return;
+
     }
+
 
     const gamePlayer =
         room.currentGame.players.find(
             player =>
-                player.name === playerName
+                player.name ===
+                playerName
         );
 
+
     if (!gamePlayer) {
+
         return;
+
     }
 
-    const oldSocketId =
-        gamePlayer.id;
-
-    /*
-     * 如果已经投过票，
-     * 重连后把旧 socket 的票迁移到新 socket。
-     */
-
-    if (
-        room.currentGame.voting &&
-        room.currentGame.voting.votes &&
-        oldSocketId !== newSocketId
-    ) {
-        const votes =
-            room.currentGame.voting.votes;
-
-        if (
-            Object.prototype.hasOwnProperty.call(
-                votes,
-                oldSocketId
-            )
-        ) {
-            votes[newSocketId] =
-                votes[oldSocketId];
-
-            delete votes[oldSocketId];
-        }
-    }
 
     gamePlayer.id =
-        newSocketId;
+        socketId;
+
 }
 
 
 /*
  * ======================================================
- * 从离开列表恢复玩家
+ * 恢复离开玩家
  * ======================================================
  */
 
@@ -161,38 +147,64 @@ function restoreDepartedPlayer(
     room,
     socket
 ) {
+
     ensureRoomData(room);
+
 
     const index =
         room.departedPlayers.findIndex(
             player =>
-                player.name === socket.playerName
+                player.name ===
+                socket.playerName
         );
 
-    if (index === -1) {
+
+    if (
+        index === -1
+    ) {
+
         return null;
+
     }
+
 
     const oldPlayer =
         room.departedPlayers[index];
+
 
     room.departedPlayers.splice(
         index,
         1
     );
 
+
     const restoredPlayer = {
-        id: socket.id,
-        name: oldPlayer.name,
-        team: oldPlayer.team || null,
-        role: oldPlayer.role || null,
-        task: oldPlayer.task || null,
-        isBot: false
+
+        id:
+            socket.id,
+
+        name:
+            oldPlayer.name,
+
+        team:
+            oldPlayer.team || null,
+
+        role:
+            oldPlayer.role || null,
+
+        task:
+            oldPlayer.task || null,
+
+        isBot:
+            false
+
     };
+
 
     room.players.push(
         restoredPlayer
     );
+
 
     socket.roomCode =
         room.code;
@@ -200,9 +212,83 @@ function restoreDepartedPlayer(
     socket.playerName =
         restoredPlayer.name;
 
+
     socket.join(
         room.code
     );
+
+
+    /*
+     * 如果当前游戏里还保留着这个人，
+     * 更新 socket。
+     */
+
+    if (
+        room.currentGame
+    ) {
+
+        const existingGamePlayer =
+            room.currentGame.players.find(
+                player =>
+                    player.name ===
+                    restoredPlayer.name
+            );
+
+
+        if (
+            existingGamePlayer
+        ) {
+
+            existingGamePlayer.id =
+                socket.id;
+
+            existingGamePlayer.team =
+                restoredPlayer.team;
+
+            existingGamePlayer.role =
+                restoredPlayer.role;
+
+            existingGamePlayer.task =
+                restoredPlayer.task;
+
+        } else if (
+            room.state ===
+                "PLAYING" ||
+            room.state ===
+                "VOTING"
+        ) {
+
+            /*
+             * 玩家在游戏中途退出后重新加入，
+             * 补回当前游戏。
+             */
+
+            room.currentGame.players.push({
+
+                id:
+                    socket.id,
+
+                name:
+                    restoredPlayer.name,
+
+                team:
+                    restoredPlayer.team,
+
+                role:
+                    restoredPlayer.role,
+
+                task:
+                    restoredPlayer.task,
+
+                isBot:
+                    false
+
+            });
+
+        }
+
+    }
+
 
     syncGamePlayerSocketId(
         room,
@@ -210,146 +296,246 @@ function restoreDepartedPlayer(
         socket.id
     );
 
+
     return restoredPlayer;
 }
 
 
 /*
  * ======================================================
- * 从当前游戏删除玩家
+ * 查找房间玩家
  * ======================================================
  */
 
-function removeCurrentGamePlayer(
+function findRoomPlayerBySocket(
     room,
-    playerName
+    socketId
 ) {
-    if (!room.currentGame) {
-        return;
+
+    return room.players.find(
+        player =>
+            player.id === socketId
+    );
+
+}
+
+
+/*
+ * ======================================================
+ * 查找当前游戏玩家
+ * ======================================================
+ */
+
+function findGamePlayer(
+    room,
+    playerId
+) {
+
+    if (
+        !room.currentGame
+    ) {
+
+        return null;
+
     }
 
-    room.currentGame.players =
-        room.currentGame.players.filter(
-            player =>
-                player.name !== playerName
+
+    return room.currentGame.players.find(
+        player =>
+            player.id === playerId
+    ) || null;
+
+}
+
+
+/*
+ * ======================================================
+ * 获取某阵营玩家
+ * ======================================================
+ */
+
+function getTeamPlayers(
+    room,
+    team
+) {
+
+    return room.players.filter(
+        player =>
+            player.team === team
+    );
+
+}
+
+
+/*
+ * ======================================================
+ * 获取某阵营投票状态
+ * ======================================================
+ */
+
+function getTeamVoting(
+    room,
+    team
+) {
+
+    if (
+        !room.currentGame ||
+        !room.currentGame.voting ||
+        !room.currentGame.voting.teams
+    ) {
+
+        return null;
+
+    }
+
+
+    return (
+        room.currentGame.voting.teams[team] ||
+        null
+    );
+
+}
+
+
+/*
+ * ======================================================
+ * 获取某阵营候选人
+ * ======================================================
+ */
+
+function getTeamCandidates(
+    room,
+    team
+) {
+
+    const voting =
+        getTeamVoting(
+            room,
+            team
         );
 
 
-    /*
-     * 如果正在投票，
-     * 同时清理他的候选资格和投票。
-     */
+    if (!voting) {
 
-    if (
-        room.currentGame.voting
-    ) {
-        const voting =
-            room.currentGame.voting;
-
-        /*
-         * 删除候选资格
-         */
-
-        voting.candidates =
-            voting.candidates.filter(
-                id => {
-                    return !(
-                        room.departedPlayers.some(
-                            player =>
-                                player.name ===
-                                playerName
-                        )
-                    );
-                }
-            );
-    }
-}
-
-
-/*
- * ======================================================
- * 当前投票候选人
- * ======================================================
- */
-
-function getVotingCandidates(room) {
-    if (
-        !room.currentGame ||
-        !room.currentGame.voting
-    ) {
         return [];
+
     }
+
 
     return (
-        room.currentGame.voting.candidates ||
+        voting.candidates ||
         []
     );
+
 }
 
 
 /*
  * ======================================================
- * 当前投票者
+ * 判断当前阵营是否存在“其他玩家”
  * ======================================================
- *
- * 第一轮：
- * 所有人都可以投。
- *
- * 重投：
- * 并列最高票的人不能投。
- *
- * 如果全员都是候选人：
- * 则没有人被排除，全员再次投。
  */
 
-function getEligibleVoters(room) {
-    if (
-        !room.currentGame ||
-        !room.currentGame.voting
-    ) {
-        return [];
-    }
+function hasOutsideVoters(
+    room,
+    team,
+    candidates
+) {
+
+    return getTeamPlayers(
+        room,
+        team
+    ).some(
+        player =>
+            !candidates.includes(
+                player.id
+            )
+    );
+
+}
+
+
+/*
+ * ======================================================
+ * 获取某阵营当前有资格投票的人
+ * ======================================================
+ */
+
+function getEligibleVoters(
+    room,
+    team
+) {
 
     const voting =
-        room.currentGame.voting;
+        getTeamVoting(
+            room,
+            team
+        );
 
-    const excludedVoters =
-        voting.excludedVoters ||
+
+    if (!voting) {
+
+        return [];
+
+    }
+
+
+    const teamPlayers =
+        getTeamPlayers(
+            room,
+            team
+        );
+
+
+    const candidates =
+        voting.candidates ||
         [];
 
 
-    return room.players.filter(
+    const excludeCandidates =
+        voting.round > 1 &&
+        voting.excludeCandidates === true;
+
+
+    return teamPlayers.filter(
         player => {
 
             /*
-             * Bot
+             * 平票重投：
+             * 并列候选人不能投。
+             *
+             * 如果全员平票，
+             * 则 excludeCandidates = false，
+             * 全员再次投。
+             */
+
+            if (
+                excludeCandidates &&
+                candidates.includes(
+                    player.id
+                )
+            ) {
+
+                return false;
+
+            }
+
+
+            /*
+             * Bot 永远可以自动投票
              */
 
             if (
                 player.isBot === true
             ) {
-                return !excludedVoters.includes(
-                    player.id
-                );
+
+                return true;
+
             }
 
 
             /*
-             * 玩家如果属于被排除的候选人，
-             * 不能参与重投。
-             */
-
-            if (
-                excludedVoters.includes(
-                    player.id
-                )
-            ) {
-                return false;
-            }
-
-
-            /*
-             * 真人必须在线。
+             * 真人必须在线
              */
 
             return Boolean(
@@ -357,48 +543,109 @@ function getEligibleVoters(room) {
                     player.id
                 )
             );
+
         }
     );
+
 }
 
 
 /*
  * ======================================================
- * 投票公共状态
+ * 某阵营投票公共状态
  * ======================================================
  */
 
-function getVotingPublicState(
+function getTeamVotingPublicState(
     room,
     socket
 ) {
+
+    const player =
+        findRoomPlayerBySocket(
+            room,
+            socket.id
+        );
+
+
+    if (!player) {
+
+        return null;
+
+    }
+
+
+    const team =
+        player.team;
+
+
     const voting =
-        room.currentGame.voting;
+        getTeamVoting(
+            room,
+            team
+        );
+
+
+    if (!voting) {
+
+        return null;
+
+    }
+
 
     const candidates =
-        getVotingCandidates(room);
+        getTeamCandidates(
+            room,
+            team
+        );
+
 
     const eligibleVoters =
-        getEligibleVoters(room);
+        getEligibleVoters(
+            room,
+            team
+        );
+
 
     const votes =
-        voting.votes || {};
+        voting.votes ||
+        {};
+
 
     const hasVoted =
         Object.prototype.hasOwnProperty.call(
             votes,
-            socket.id
+            player.name
         );
 
+
     const canVote =
+        !voting.finished &&
+        !voting.processingTie &&
         eligibleVoters.some(
-            player =>
-                player.id === socket.id
-        ) &&
-        voting.processingTie !== true;
+            voter =>
+                voter.id ===
+                socket.id
+        );
+
+
+    const candidatePlayers =
+        candidates
+            .map(
+                candidateId =>
+                    findGamePlayer(
+                        room,
+                        candidateId
+                    )
+            )
+            .filter(Boolean);
 
 
     return {
+
+        team:
+            team,
+
         round:
             voting.round,
 
@@ -406,35 +653,25 @@ function getVotingPublicState(
             voting.round > 1,
 
         candidates:
-            candidates
-                .map(candidateId => {
+            candidatePlayers.map(
+                candidate => ({
 
-                    const player =
-                        room.currentGame.players.find(
-                            item =>
-                                item.id ===
-                                candidateId
-                        );
+                    id:
+                        candidate.id,
 
-                    if (!player) {
-                        return null;
-                    }
+                    name:
+                        candidate.name,
 
-                    return {
-                        id:
-                            player.id,
+                    team:
+                        candidate.team
 
-                        name:
-                            player.name,
-
-                        team:
-                            player.team
-                    };
                 })
-                .filter(Boolean),
+            ),
 
         votedCount:
-            Object.keys(votes).length,
+            Object.keys(
+                votes
+            ).length,
 
         voterCount:
             eligibleVoters.length,
@@ -445,15 +682,20 @@ function getVotingPublicState(
         canVote:
             canVote,
 
+        finished:
+            voting.finished === true,
+
         processingTie:
             voting.processingTie === true
+
     };
+
 }
 
 
 /*
  * ======================================================
- * 给指定玩家发送投票界面
+ * 给某个玩家发送投票界面
  * ======================================================
  */
 
@@ -461,305 +703,93 @@ function sendVotingToSocket(
     socket,
     room
 ) {
+
     if (
         room.state !==
         "VOTING"
     ) {
+
         return;
+
     }
 
-    if (
-        !room.currentGame ||
-        !room.currentGame.voting
-    ) {
+
+    const player =
+        findRoomPlayerBySocket(
+            room,
+            socket.id
+        );
+
+
+    if (!player) {
+
         return;
+
     }
+
+
+    const voting =
+        getTeamVoting(
+            room,
+            player.team
+        );
+
+
+    if (!voting) {
+
+        return;
+
+    }
+
+
+    /*
+     * 这一方已经结束，
+     * 只等待另一方。
+     */
+
+    if (
+        voting.finished
+    ) {
+
+        socket.emit(
+            "team_vote_finished_waiting",
+            {
+
+                team:
+                    player.team,
+
+                message:
+                    `你所在的 ${player.team} 阵营投票已经结束，等待另一阵营...`
+
+            }
+        );
+
+
+        return;
+
+    }
+
 
     socket.emit(
         "voting_started",
-        getVotingPublicState(
+        getTeamVotingPublicState(
             room,
             socket
         )
     );
+
 }
 
 
 /*
  * ======================================================
- * Bot 自动投票
+ * 给整个房间发送当前投票状态
  * ======================================================
  */
 
-function autoBotVotes(room) {
-    if (
-        !room.isTestRoom
-    ) {
-        return;
-    }
-
-    if (
-        !room.currentGame ||
-        !room.currentGame.voting
-    ) {
-        return;
-    }
-
-    const voting =
-        room.currentGame.voting;
-
-    const candidates =
-        getVotingCandidates(room);
-
-    const eligibleBots =
-        getEligibleVoters(room).filter(
-            player =>
-                player.isBot === true
-        );
-
-
-    eligibleBots.forEach(
-        bot => {
-
-            /*
-             * 已经投过
-             */
-
-            if (
-                Object.prototype.hasOwnProperty.call(
-                    voting.votes,
-                    bot.id
-                )
-            ) {
-                return;
-            }
-
-
-            let choices = [];
-
-
-            /*
-             * 第一轮：
-             * 可以投任何其他玩家。
-             */
-
-            if (
-                voting.round === 1
-            ) {
-
-                choices =
-                    room.currentGame.players.filter(
-                        player => {
-
-                            if (
-                                player.id ===
-                                bot.id
-                            ) {
-                                return false;
-                            }
-
-                            return room.players.some(
-                                activePlayer =>
-                                    activePlayer.id ===
-                                    player.id
-                            );
-                        }
-                    );
-
-            } else {
-
-                /*
-                 * 重投：
-                 * 只能投候选人。
-                 *
-                 * 但是不能投自己。
-                 */
-
-                choices =
-                    room.currentGame.players.filter(
-                        player => {
-
-                            if (
-                                player.id ===
-                                bot.id
-                            ) {
-                                return false;
-                            }
-
-                            return candidates.includes(
-                                player.id
-                            );
-                        }
-                    );
-            }
-
-
-            if (
-                choices.length === 0
-            ) {
-                return;
-            }
-
-
-            /*
-             * 第一轮保持随机，
-             * 方便测试不同结果。
-             */
-
-            if (
-                voting.round === 1
-            ) {
-
-                const target =
-                    choices[
-                        Math.floor(
-                            Math.random() *
-                            choices.length
-                        )
-                    ];
-
-                voting.votes[
-                    bot.id
-                ] =
-                    target.id;
-
-            } else {
-
-                /*
-                 * 重投改成确定性投票。
-                 *
-                 * 这样不会因为 Bot 随机再次造成
-                 * 无限平票。
-                 */
-
-                const target =
-                    choices[0];
-
-                voting.votes[
-                    bot.id
-                ] =
-                    target.id;
-            }
-
-        }
-    );
-}
-
-
-/*
- * ======================================================
- * 开始投票
- * ======================================================
- */
-
-function startVotingRound(
-    room,
-    candidateIds,
-    isRevote = false
+function broadcastVotingState(
+    room
 ) {
-    if (!room.currentGame) {
-        return;
-    }
-
-
-    /*
-     * 过滤已经离开房间的人。
-     */
-
-    const activeCandidateIds =
-        candidateIds.filter(
-            id =>
-                room.players.some(
-                    player =>
-                        player.id === id
-                )
-        );
-
-
-    /*
-     * 如果候选人没了，
-     * 回退到当前所有玩家。
-     */
-
-    const finalCandidates =
-        activeCandidateIds.length > 0
-            ? activeCandidateIds
-            : room.players.map(
-                player =>
-                    player.id
-            );
-
-
-    /*
-     * 判断是否存在“其他玩家”
-     */
-
-    const hasOutsideVoters =
-        room.players.some(
-            player =>
-                !finalCandidates.includes(
-                    player.id
-                )
-        );
-
-
-    /*
-     * 普通重投：
-     * 候选人不能投。
-     *
-     * 全员平票：
-     * 没有其他玩家，
-     * 所以全员重新投。
-     */
-
-    const excludedVoters =
-        isRevote &&
-        hasOutsideVoters
-            ? [...finalCandidates]
-            : [];
-
-
-    const oldVoting =
-        room.currentGame.voting;
-
-
-    const nextRound =
-        isRevote &&
-        oldVoting
-            ? oldVoting.round + 1
-            : 1;
-
-
-    room.state =
-        "VOTING";
-
-
-    room.currentGame.state =
-        "VOTING";
-
-
-    room.currentGame.voting = {
-
-        round:
-            nextRound,
-
-        candidates:
-            finalCandidates,
-
-        excludedVoters:
-            excludedVoters,
-
-        votes:
-            {},
-
-        processingTie:
-            false
-    };
-
-
-    /*
-     * 给真人发送投票界面。
-     */
 
     room.players.forEach(
         player => {
@@ -767,7 +797,9 @@ function startVotingRound(
             if (
                 player.isBot === true
             ) {
+
                 return;
+
             }
 
 
@@ -778,7 +810,9 @@ function startVotingRound(
 
 
             if (!playerSocket) {
+
                 return;
+
             }
 
 
@@ -790,55 +824,375 @@ function startVotingRound(
         }
     );
 
+}
+
+
+/*
+ * ======================================================
+ * Bot 自动投票
+ * ======================================================
+ */
+
+function autoBotVotesForTeam(
+    room,
+    team
+) {
+
+    if (
+        !room.isTestRoom
+    ) {
+
+        return;
+
+    }
+
+
+    const voting =
+        getTeamVoting(
+            room,
+            team
+        );
+
+
+    if (!voting) {
+
+        return;
+
+    }
+
+
+    if (
+        voting.finished
+    ) {
+
+        return;
+
+    }
+
+
+    const eligibleBots =
+        getEligibleVoters(
+            room,
+            team
+        ).filter(
+            player =>
+                player.isBot === true
+        );
+
+
+    const candidates =
+        getTeamCandidates(
+            room,
+            team
+        );
+
+
+    eligibleBots.forEach(
+        bot => {
+
+            /*
+             * 每轮每个 Bot 只能投一次
+             */
+
+            if (
+                Object.prototype.hasOwnProperty.call(
+                    voting.votes,
+                    bot.name
+                )
+            ) {
+
+                return;
+
+            }
+
+
+            let choices;
+
+
+            /*
+             * 第一轮：
+             * 投同阵营其他玩家。
+             */
+
+            if (
+                voting.round === 1
+            ) {
+
+                choices =
+                    getTeamPlayers(
+                        room,
+                        team
+                    ).filter(
+                        player =>
+                            player.id !==
+                            bot.id
+                    );
+
+            } else {
+
+                /*
+                 * 重投：
+                 * 只能投平票候选人。
+                 */
+
+                choices =
+                    room.currentGame.players.filter(
+                        player =>
+                            player.team ===
+                                team &&
+                            candidates.includes(
+                                player.id
+                            ) &&
+                            player.id !==
+                                bot.id
+                    );
+
+            }
+
+
+            /*
+             * 没有可投对象
+             */
+
+            if (
+                choices.length === 0
+            ) {
+
+                return;
+
+            }
+
+
+            let target;
+
+
+            if (
+                voting.round === 1
+            ) {
+
+                /*
+                 * 第一轮随机，
+                 * 可以体验不同结果。
+                 */
+
+                target =
+                    choices[
+                        Math.floor(
+                            Math.random() *
+                            choices.length
+                        )
+                    ];
+
+            } else {
+
+                /*
+                 * 重投使用固定选择，
+                 * 防止测试 Bot 反复随机造成难以测试。
+                 */
+
+                target =
+                    choices[0];
+
+            }
+
+
+            voting.votes[
+                bot.name
+            ] =
+                target.id;
+
+        }
+    );
+
+}
+
+
+/*
+ * ======================================================
+ * 开始某阵营投票轮次
+ * ======================================================
+ */
+
+function startTeamVotingRound(
+    room,
+    team,
+    candidateIds,
+    isRevote
+) {
+
+    const activePlayers =
+        getTeamPlayers(
+            room,
+            team
+        );
+
+
+    const activeIds =
+        activePlayers.map(
+            player =>
+                player.id
+        );
+
+
+    let finalCandidates =
+        candidateIds.filter(
+            id =>
+                activeIds.includes(
+                    id
+                )
+        );
+
 
     /*
-     * 测试 Bot 自动投票
+     * 候选人如果全部离开，
+     * 回到该阵营所有玩家。
      */
 
-    autoBotVotes(
-        room
+    if (
+        finalCandidates.length ===
+        0
+    ) {
+
+        finalCandidates =
+            activeIds;
+
+    }
+
+
+    /*
+     * 平票重投：
+     *
+     * 如果存在非候选人：
+     * 候选人不能投。
+     *
+     * 如果所有人都是候选人：
+     * 全员再次投。
+     */
+
+    const outsideExists =
+        hasOutsideVoters(
+            room,
+            team,
+            finalCandidates
+        );
+
+
+    const voting = {
+
+        team:
+            team,
+
+        round:
+            isRevote
+                ? (
+                    getTeamVoting(
+                        room,
+                        team
+                    )
+                        ? getTeamVoting(
+                            room,
+                            team
+                        ).round + 1
+                        : 2
+                )
+                : 1,
+
+        candidates:
+            finalCandidates,
+
+        votes:
+            {},
+
+        excludeCandidates:
+            isRevote &&
+            outsideExists,
+
+        processingTie:
+            false,
+
+        finished:
+            false,
+
+        result:
+            null
+
+    };
+
+
+    if (
+        !room.currentGame.voting
+    ) {
+
+        room.currentGame.voting = {
+
+            teams: {}
+
+        };
+
+    }
+
+
+    room.currentGame.voting.teams[
+        team
+    ] =
+        voting;
+
+
+    /*
+     * 单人测试自动投票
+     */
+
+    autoBotVotesForTeam(
+        room,
+        team
     );
 
 
     /*
-     * 非递归检查。
-     *
-     * 重要：
-     * 不在这里直接 processVoting，
-     * 用 setTimeout 打断调用链。
+     * 下一轮异步检查
      */
 
     setTimeout(
         () => {
 
-            processVoting(
-                room
+            processTeamVoting(
+                room,
+                team
             );
 
         },
         0
     );
 
-
-    console.log(
-        `投票开始: ${room.code}, ` +
-        `第 ${nextRound} 轮, ` +
-        `候选人数: ${finalCandidates.length}`
-    );
 }
 
 
 /*
  * ======================================================
- * 计票
+ * 计某阵营票
  * ======================================================
  */
 
-function countVotes(room) {
+function countTeamVotes(
+    room,
+    team
+) {
+
     const voting =
-        room.currentGame.voting;
+        getTeamVoting(
+            room,
+            team
+        );
+
 
     const counts = {};
+
+
+    if (!voting) {
+
+        return counts;
+
+    }
 
 
     voting.candidates.forEach(
@@ -846,7 +1200,8 @@ function countVotes(room) {
 
             counts[
                 candidateId
-            ] = 0;
+            ] =
+                0;
 
         }
     );
@@ -875,49 +1230,319 @@ function countVotes(room) {
 
 
     return counts;
+
 }
 
 
 /*
  * ======================================================
- * 处理投票
+ * 构造单阵营胜负
  * ======================================================
  */
 
-function processVoting(room) {
+function createTeamVoteResult(
+    room,
+    team,
+    targetId,
+    counts,
+    round
+) {
+
+    const eliminatedPlayer =
+        findGamePlayer(
+            room,
+            targetId
+        );
+
+
+    if (!eliminatedPlayer) {
+
+        return null;
+
+    }
+
+
+    let winner =
+        "SPY";
+
+
+    let winnerText =
+        `${team} 阵营内鬼胜利`;
+
+
+    /*
+     * 投到内鬼
+     */
+
+    if (
+        eliminatedPlayer.role ===
+        "SPY"
+    ) {
+
+        winner =
+            "CIVILIAN";
+
+
+        winnerText =
+            `${team} 平民阵营胜利`;
+
+    }
+
+
+    /*
+     * 投到呆呆鸟
+     */
+
+    else if (
+        eliminatedPlayer.role ===
+        "DODO"
+    ) {
+
+        winner =
+            "DODO";
+
+
+        winnerText =
+            `${team} 呆呆鸟单独胜利`;
+
+    }
+
+
+    /*
+     * 投到平民
+     */
+
+    else {
+
+        winner =
+            "SPY";
+
+
+        winnerText =
+            `${team} 阵营内鬼胜利`;
+
+    }
+
+
+    return {
+
+        team:
+            team,
+
+        round:
+            round,
+
+        eliminatedId:
+            eliminatedPlayer.id,
+
+        eliminatedName:
+            eliminatedPlayer.name,
+
+        eliminatedRole:
+            eliminatedPlayer.role,
+
+        counts:
+            counts,
+
+        winner:
+            winner,
+
+        winnerText:
+            winnerText
+
+    };
+
+}
+
+
+/*
+ * ======================================================
+ * 判断两个阵营是否都结束
+ * ======================================================
+ */
+
+function bothTeamsFinished(
+    room
+) {
+
+    const ct =
+        getTeamVoting(
+            room,
+            "CT"
+        );
+
+
+    const t =
+        getTeamVoting(
+            room,
+            "T"
+        );
+
+
+    return Boolean(
+        ct &&
+        ct.finished &&
+        t &&
+        t.finished
+    );
+
+}
+
+
+/*
+ * ======================================================
+ * 最终结束游戏
+ * ======================================================
+ */
+
+function finishAllVoting(
+    room
+) {
+
+    if (
+        !bothTeamsFinished(
+            room
+        )
+    ) {
+
+        return;
+
+    }
+
+
+    room.state =
+        "REVEAL";
+
+
+    room.currentGame.state =
+        "REVEAL";
+
+
+    const ctVoting =
+        getTeamVoting(
+            room,
+            "CT"
+        );
+
+
+    const tVoting =
+        getTeamVoting(
+            room,
+            "T"
+        );
+
+
+    const voteResult = {
+
+        CT:
+            ctVoting.result,
+
+        T:
+            tVoting.result
+
+    };
+
+
+    room.currentGame.voting.result =
+        voteResult;
+
+
+    const result =
+        getPublicGame(
+            room.currentGame,
+            true
+        );
+
+
+    result.voteResult =
+        voteResult;
+
+
+    result.isTestRoom =
+        room.isTestRoom === true;
+
+
+    io.to(
+        room.code
+    ).emit(
+        "room_update",
+        getClientRoom(room)
+    );
+
+
+    io.to(
+        room.code
+    ).emit(
+        "game_finished",
+        result
+    );
+
+
+    console.log(
+        `投票全部结束: ${room.code}`
+    );
+
+}
+
+
+/*
+ * ======================================================
+ * 处理某阵营投票
+ * ======================================================
+ */
+
+function processTeamVoting(
+    room,
+    team
+) {
+
     if (
         room.state !==
         "VOTING"
     ) {
-        return;
-    }
 
-    if (
-        !room.currentGame ||
-        !room.currentGame.voting
-    ) {
         return;
+
     }
 
 
     const voting =
-        room.currentGame.voting;
+        getTeamVoting(
+            room,
+            team
+        );
 
 
-    /*
-     * 正在从平票切换到下一轮
-     */
+    if (!voting) {
+
+        return;
+
+    }
+
 
     if (
-        voting.processingTie ===
-        true
+        voting.finished
     ) {
+
         return;
+
+    }
+
+
+    if (
+        voting.processingTie
+    ) {
+
+        return;
+
     }
 
 
     const eligibleVoters =
-        getEligibleVoters(room);
+        getEligibleVoters(
+            room,
+            team
+        );
 
 
     const votedCount =
@@ -927,7 +1552,9 @@ function processVoting(room) {
 
 
     /*
-     * 还没全部投票
+     * ==================================================
+     * 尚未全部投完
+     * ==================================================
      */
 
     if (
@@ -940,9 +1567,13 @@ function processVoting(room) {
 
                 if (
                     player.isBot ===
-                    true
+                    true ||
+                    player.team !==
+                    team
                 ) {
+
                     return;
+
                 }
 
 
@@ -953,13 +1584,19 @@ function processVoting(room) {
 
 
                 if (!playerSocket) {
+
                     return;
+
                 }
 
 
                 playerSocket.emit(
                     "vote_progress",
                     {
+
+                        team:
+                            team,
+
                         votedCount:
                             votedCount,
 
@@ -969,8 +1606,9 @@ function processVoting(room) {
                         hasVoted:
                             Object.prototype.hasOwnProperty.call(
                                 voting.votes,
-                                player.id
+                                player.name
                             )
+
                     }
                 );
 
@@ -979,17 +1617,21 @@ function processVoting(room) {
 
 
         return;
+
     }
 
 
     /*
      * ==================================================
-     * 计票
+     * 全部投完
      * ==================================================
      */
 
     const counts =
-        countVotes(room);
+        countTeamVotes(
+            room,
+            team
+        );
 
 
     const entries =
@@ -1002,7 +1644,9 @@ function processVoting(room) {
         entries.length ===
         0
     ) {
+
         return;
+
     }
 
 
@@ -1039,23 +1683,12 @@ function processVoting(room) {
         1
     ) {
 
-        /*
-         * 标记正在切换，
-         * 防止这几百毫秒内又收票。
-         */
-
         voting.processingTie =
             true;
 
 
-        console.log(
-            `投票平票: ${room.code}, ` +
-            `第 ${voting.round} 轮`
-        );
-
-
         /*
-         * 告诉玩家平票
+         * 通知该阵营的真人
          */
 
         room.players.forEach(
@@ -1063,9 +1696,13 @@ function processVoting(room) {
 
                 if (
                     player.isBot ===
-                    true
+                    true ||
+                    player.team !==
+                    team
                 ) {
+
                     return;
+
                 }
 
 
@@ -1076,13 +1713,19 @@ function processVoting(room) {
 
 
                 if (!playerSocket) {
+
                     return;
+
                 }
 
 
                 playerSocket.emit(
                     "vote_tie",
                     {
+
+                        team:
+                            team,
+
                         round:
                             voting.round,
 
@@ -1091,6 +1734,7 @@ function processVoting(room) {
 
                         voteCounts:
                             counts
+
                     }
                 );
 
@@ -1099,52 +1743,86 @@ function processVoting(room) {
 
 
         /*
-         * 延迟进入下一轮。
+         * 重要：
          *
-         * 这一步彻底解决递归爆炸。
+         * 不直接递归调用自己。
+         *
+         * 等 700ms 后开新一轮。
          */
 
         setTimeout(
             () => {
 
-                const stillExists =
-                    topCandidates.some(
-                        candidateId =>
-                            room.players.some(
-                                player =>
-                                    player.id ===
-                                    candidateId
-                            )
-                    );
-
+                /*
+                 * 房间可能已经关闭
+                 */
 
                 if (
-                    !stillExists
+                    !getRoom(
+                        room.code
+                    )
                 ) {
-
-                    /*
-                     * 候选人全都离开，
-                     * 回到所有当前玩家。
-                     */
-
-                    startVotingRound(
-                        room,
-                        room.players.map(
-                            player =>
-                                player.id
-                        ),
-                        true
-                    );
 
                     return;
 
                 }
 
 
-                startVotingRound(
+                /*
+                 * 如果候选人全部离开，
+                 * 重新使用该阵营当前所有人。
+                 */
+
+                const activeIds =
+                    getTeamPlayers(
+                        room,
+                        team
+                    ).map(
+                        player =>
+                            player.id
+                    );
+
+
+                const stillHaveCandidate =
+                    topCandidates.some(
+                        candidateId =>
+                            activeIds.includes(
+                                candidateId
+                            )
+                    );
+
+
+                const nextCandidates =
+                    stillHaveCandidate
+                        ? topCandidates
+                        : activeIds;
+
+
+                /*
+                 * 如果没人了，
+                 * 无法继续该阵营投票。
+                 */
+
+                if (
+                    nextCandidates.length ===
+                    0
+                ) {
+
+                    return;
+
+                }
+
+
+                startTeamVotingRound(
                     room,
-                    topCandidates,
+                    team,
+                    nextCandidates,
                     true
+                );
+
+
+                broadcastVotingState(
+                    room
                 );
 
             },
@@ -1153,6 +1831,7 @@ function processVoting(room) {
 
 
         return;
+
     }
 
 
@@ -1166,170 +1845,308 @@ function processVoting(room) {
         topCandidates[0];
 
 
-    const eliminatedPlayer =
-        room.currentGame.players.find(
-            player =>
-                player.id ===
-                eliminatedId
+    const result =
+        createTeamVoteResult(
+            room,
+            team,
+            eliminatedId,
+            counts,
+            voting.round
         );
 
 
-    if (!eliminatedPlayer) {
+    if (!result) {
+
         return;
+
     }
 
 
-    let winner =
-        "SPY";
+    voting.result =
+        result;
 
-    let winnerText =
-        "🕵️ 内鬼阵营胜利";
+
+    voting.finished =
+        true;
+
+
+    voting.processingTie =
+        false;
 
 
     /*
-     * 呆呆鸟被投出
+     * 这一边投完。
+     */
+
+    room.players.forEach(
+        player => {
+
+            if (
+                player.isBot ===
+                true ||
+                player.team !==
+                team
+            ) {
+
+                return;
+
+            }
+
+
+            const playerSocket =
+                io.sockets.sockets.get(
+                    player.id
+                );
+
+
+            if (!playerSocket) {
+
+                return;
+
+            }
+
+
+            playerSocket.emit(
+                "team_vote_finished_waiting",
+                {
+
+                    team:
+                        team,
+
+                    message:
+                        `${team} 阵营投票已经结束，等待另一阵营...`
+
+                }
+            );
+
+        }
+    );
+
+
+    /*
+     * 另一边还没结束
      */
 
     if (
-        eliminatedPlayer.role ===
-        "DODO"
+        !bothTeamsFinished(
+            room
+        )
     ) {
 
-        winner =
-            "DODO";
-
-
-        winnerText =
-            "🦤 呆呆鸟单独胜利";
-
-    }
-
-
-    /*
-     * 内鬼被投出
-     */
-
-    else if (
-        eliminatedPlayer.role ===
-        "SPY"
-    ) {
-
-        winner =
-            "CIVILIAN";
-
-
-        winnerText =
-            "🛡️ 平民阵营胜利";
-
-    }
-
-
-    /*
-     * 平民被投出
-     */
-
-    else {
-
-        winner =
-            "SPY";
-
-
-        winnerText =
-            "🕵️ 内鬼阵营胜利";
-
-    }
-
-
-    /*
-     * ==================================================
-     * 保存投票结果
-     * ==================================================
-     */
-
-    room.currentGame.voting.result = {
-
-        round:
-            voting.round,
-
-        eliminatedId:
-            eliminatedId,
-
-        eliminatedName:
-            eliminatedPlayer.name,
-
-        eliminatedRole:
-            eliminatedPlayer.role,
-
-        counts:
-            counts,
-
-        winner:
-            winner,
-
-        winnerText:
-            winnerText
-
-    };
-
-
-    /*
-     * ==================================================
-     * 进入揭晓
-     * ==================================================
-     */
-
-    room.state =
-        "REVEAL";
-
-
-    room.currentGame.state =
-        "REVEAL";
-
-
-    const result =
-        getPublicGame(
-            room.currentGame,
-            true
+        console.log(
+            `${team} 投票完成，等待另一阵营: ${room.code}`
         );
 
 
-    result.voteResult =
-        room.currentGame.voting.result;
+        broadcastVotingState(
+            room
+        );
 
 
-    result.isTestRoom =
-        room.isTestRoom === true;
+        return;
+
+    }
 
 
-    io.to(
-        room.code
-    ).emit(
-        "room_update",
-        getClientRoom(room)
+    /*
+     * 两边都完成
+     */
+
+    finishAllVoting(
+        room
     );
 
-
-    io.to(
-        room.code
-    ).emit(
-        "game_finished",
-        result
-    );
-
-
-    console.log(
-        `投票结束: ${room.code}, ` +
-        `第 ${voting.round} 轮, ` +
-        `被投出: ${eliminatedPlayer.name}, ` +
-        `身份: ${eliminatedPlayer.role}, ` +
-        `结果: ${winnerText}`
-    );
 }
 
 
 /*
  * ======================================================
- * 给重连玩家恢复当前游戏
+ * 删除玩家的当前游戏数据
+ * ======================================================
+ */
+
+function removePlayerFromCurrentGame(
+    room,
+    player
+) {
+
+    if (
+        !room.currentGame
+    ) {
+
+        return;
+
+    }
+
+
+    /*
+     * 游戏进行中：
+     * 真正删除。
+     */
+
+    if (
+        room.state ===
+            "PLAYING" ||
+        room.state ===
+            "VOTING"
+    ) {
+
+        room.currentGame.players =
+            room.currentGame.players.filter(
+                gamePlayer =>
+                    gamePlayer.name !==
+                    player.name
+            );
+
+    }
+
+
+    /*
+     * 投票期间清理相关票
+     */
+
+    if (
+        room.currentGame.voting &&
+        room.currentGame.voting.teams
+    ) {
+
+        ["CT", "T"].forEach(
+            team => {
+
+                const voting =
+                    room.currentGame.voting.teams[
+                        team
+                    ];
+
+
+                if (!voting) {
+
+                    return;
+
+                }
+
+
+                delete voting.votes[
+                    player.name
+                ];
+
+
+                /*
+                 * 删除作为候选人的资格
+                 */
+
+                voting.candidates =
+                    voting.candidates.filter(
+                        id =>
+                            id !==
+                            player.id
+                    );
+
+
+                /*
+                 * 删除别人投给他的票
+                 */
+
+                Object.keys(
+                    voting.votes
+                ).forEach(
+                    voterName => {
+
+                        if (
+                            voting.votes[
+                                voterName
+                            ] ===
+                            player.id
+                        ) {
+
+                            delete voting.votes[
+                                voterName
+                            ];
+
+                        }
+
+                    }
+                );
+
+            }
+        );
+
+    }
+
+}
+
+
+/*
+ * ======================================================
+ * 发送私人身份
+ * ======================================================
+ */
+
+function sendPrivateRoles(
+    room
+) {
+
+    if (
+        room.mode !==
+        "UNDERCOVER"
+    ) {
+
+        return;
+
+    }
+
+
+    room.players.forEach(
+        player => {
+
+            if (
+                player.isBot ===
+                true
+            ) {
+
+                return;
+
+            }
+
+
+            const playerSocket =
+                io.sockets.sockets.get(
+                    player.id
+                );
+
+
+            if (!playerSocket) {
+
+                return;
+
+            }
+
+
+            const info =
+                getPrivatePlayerInfo(
+                    room.currentGame,
+                    player.id
+                );
+
+
+            if (info) {
+
+                playerSocket.emit(
+                    "private_role",
+                    info
+                );
+
+            }
+
+        }
+    );
+
+}
+
+
+/*
+ * ======================================================
+ * 恢复当前游戏
  * ======================================================
  */
 
@@ -1338,8 +2155,12 @@ function sendCurrentGameToSocket(
     room
 ) {
 
-    if (!room.currentGame) {
+    if (
+        !room.currentGame
+    ) {
+
         return;
+
     }
 
 
@@ -1352,14 +2173,8 @@ function sendCurrentGameToSocket(
         "PLAYING"
     ) {
 
-        /*
-         * 测试房间：
-         * 显示全部身份。
-         */
-
         if (
-            room.isTestRoom ===
-            true
+            room.isTestRoom
         ) {
 
             const testGame =
@@ -1392,14 +2207,10 @@ function sendCurrentGameToSocket(
                     "private_role",
                     privateInfo
                 );
+
             }
 
         } else {
-
-            /*
-             * 普通多人：
-             * 只发送公开数据。
-             */
 
             socket.emit(
                 "game_started",
@@ -1428,9 +2239,13 @@ function sendCurrentGameToSocket(
                         "private_role",
                         info
                     );
+
                 }
+
             }
+
         }
+
     }
 
 
@@ -1447,6 +2262,7 @@ function sendCurrentGameToSocket(
             socket,
             room
         );
+
     }
 
 
@@ -1485,64 +2301,9 @@ function sendCurrentGameToSocket(
             "game_finished",
             result
         );
-    }
-}
 
-
-/*
- * ======================================================
- * 发送私人身份
- * ======================================================
- */
-
-function sendPrivateRoles(room) {
-    if (
-        room.mode !==
-        "UNDERCOVER"
-    ) {
-        return;
     }
 
-
-    room.players.forEach(
-        player => {
-
-            if (
-                player.isBot ===
-                true
-            ) {
-                return;
-            }
-
-
-            const playerSocket =
-                io.sockets.sockets.get(
-                    player.id
-                );
-
-
-            if (!playerSocket) {
-                return;
-            }
-
-
-            const info =
-                getPrivatePlayerInfo(
-                    room.currentGame,
-                    player.id
-                );
-
-
-            if (info) {
-
-                playerSocket.emit(
-                    "private_role",
-                    info
-                );
-            }
-
-        }
-    );
 }
 
 
@@ -1564,7 +2325,7 @@ io.on(
 
         /*
          * ==================================================
-         * 创建普通房间
+         * 创建房间
          * ==================================================
          */
 
@@ -1593,6 +2354,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -1620,21 +2382,11 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
-                    if (!socket.connected) {
-
-                        socket.emit(
-                            "error_message",
-                            "服务器连接尚未建立"
-                        );
-
-                        return;
-                    }
-
-
-                    const room =
+                    const newRoom =
                         createRoom(
                             socket.id,
                             playerName,
@@ -1643,15 +2395,15 @@ io.on(
                         );
 
 
-                    room.isTestRoom =
+                    newRoom.isTestRoom =
                         false;
 
 
-                    room.departedPlayers =
+                    newRoom.departedPlayers =
                         [];
 
 
-                    room.players.push({
+                    newRoom.players.push({
 
                         id:
                             socket.id,
@@ -1675,34 +2427,37 @@ io.on(
 
 
                     socket.roomCode =
-                        room.code;
-
+                        newRoom.code;
 
                     socket.playerName =
                         playerName;
 
 
                     socket.join(
-                        room.code
+                        newRoom.code
                     );
 
 
                     socket.emit(
                         "room_created",
-                        getClientRoom(room)
+                        getClientRoom(
+                            newRoom
+                        )
                     );
 
 
                     io.to(
-                        room.code
+                        newRoom.code
                     ).emit(
                         "room_update",
-                        getClientRoom(room)
+                        getClientRoom(
+                            newRoom
+                        )
                     );
 
 
                     console.log(
-                        `创建房间: ${room.code}`
+                        `创建房间: ${newRoom.code}`
                     );
 
                 } catch (error) {
@@ -1755,6 +2510,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -1782,10 +2538,11 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
-                    const room =
+                    const newRoom =
                         createRoom(
                             socket.id,
                             playerName,
@@ -1794,11 +2551,11 @@ io.on(
                         );
 
 
-                    room.isTestRoom =
+                    newRoom.isTestRoom =
                         true;
 
 
-                    room.departedPlayers =
+                    newRoom.departedPlayers =
                         [];
 
 
@@ -1806,7 +2563,7 @@ io.on(
                      * 真人
                      */
 
-                    room.players.push({
+                    newRoom.players.push({
 
                         id:
                             socket.id,
@@ -1839,10 +2596,10 @@ io.on(
                         i++
                     ) {
 
-                        room.players.push({
+                        newRoom.players.push({
 
                             id:
-                                `bot-${room.code}-${i}`,
+                                `bot-${newRoom.code}-${i}`,
 
                             name:
                                 `🤖 测试玩家 ${i}`,
@@ -1865,34 +2622,37 @@ io.on(
 
 
                     socket.roomCode =
-                        room.code;
-
+                        newRoom.code;
 
                     socket.playerName =
                         playerName;
 
 
                     socket.join(
-                        room.code
+                        newRoom.code
                     );
 
 
                     socket.emit(
                         "room_created",
-                        getClientRoom(room)
+                        getClientRoom(
+                            newRoom
+                        )
                     );
 
 
                     io.to(
-                        room.code
+                        newRoom.code
                     ).emit(
                         "room_update",
-                        getClientRoom(room)
+                        getClientRoom(
+                            newRoom
+                        )
                     );
 
 
                     console.log(
-                        `测试房间: ${room.code}`
+                        `测试房间: ${newRoom.code}`
                     );
 
                 } catch (error) {
@@ -1916,7 +2676,7 @@ io.on(
 
         /*
          * ==================================================
-         * 重连
+         * 自动重连
          * ==================================================
          */
 
@@ -1944,6 +2704,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -1961,6 +2722,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -1979,8 +2741,7 @@ io.on(
                     if (existing) {
 
                         if (
-                            existing.isBot ===
-                            true
+                            existing.isBot
                         ) {
 
                             socket.emit(
@@ -1989,6 +2750,7 @@ io.on(
                             );
 
                             return;
+
                         }
 
 
@@ -1998,10 +2760,6 @@ io.on(
 
                         socket.roomCode =
                             room.code;
-
-
-                        socket.playerName =
-                            existing.name;
 
 
                         socket.join(
@@ -2016,6 +2774,7 @@ io.on(
 
                             room.hostId =
                                 socket.id;
+
                         }
 
 
@@ -2042,7 +2801,9 @@ io.on(
                             );
 
                             return;
+
                         }
+
                     }
 
 
@@ -2063,11 +2824,6 @@ io.on(
                     sendCurrentGameToSocket(
                         socket,
                         room
-                    );
-
-
-                    console.log(
-                        `重连成功: ${name}, ${room.code}`
                     );
 
                 } catch (error) {
@@ -2120,6 +2876,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2145,6 +2902,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2153,7 +2911,7 @@ io.on(
 
 
                     /*
-                     * 先尝试恢复离开的人
+                     * 优先恢复离开的人
                      */
 
                     const restored =
@@ -2186,11 +2944,12 @@ io.on(
 
 
                         return;
+
                     }
 
 
                     /*
-                     * 已经存在
+                     * 已存在玩家
                      */
 
                     const existing =
@@ -2204,8 +2963,7 @@ io.on(
                     if (existing) {
 
                         if (
-                            existing.isBot ===
-                            true
+                            existing.isBot
                         ) {
 
                             socket.emit(
@@ -2214,6 +2972,7 @@ io.on(
                             );
 
                             return;
+
                         }
 
 
@@ -2241,6 +3000,7 @@ io.on(
 
                             room.hostId =
                                 socket.id;
+
                         }
 
 
@@ -2272,11 +3032,12 @@ io.on(
 
 
                         return;
+
                     }
 
 
                     /*
-                     * 新玩家只能加入等待状态
+                     * 新人只能加入等待中的房间
                      */
 
                     if (
@@ -2290,6 +3051,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2297,6 +3059,7 @@ io.on(
                         addPlayer(
                             room,
                             {
+
                                 id:
                                     socket.id,
 
@@ -2314,6 +3077,7 @@ io.on(
 
                                 isBot:
                                     false
+
                             }
                         );
 
@@ -2328,12 +3092,12 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
                     socket.roomCode =
                         room.code;
-
 
                     socket.playerName =
                         playerName;
@@ -2398,7 +3162,9 @@ io.on(
                         !room ||
                         !room.currentGame
                     ) {
+
                         return;
+
                     }
 
 
@@ -2415,6 +3181,7 @@ io.on(
                             "private_role",
                             info
                         );
+
                     }
 
                 } catch (error) {
@@ -2423,6 +3190,7 @@ io.on(
                         "request_private_role 错误:",
                         error
                     );
+
                 }
 
             }
@@ -2455,6 +3223,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2469,6 +3238,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2483,6 +3253,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2503,6 +3274,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2527,8 +3299,7 @@ io.on(
                      */
 
                     if (
-                        room.isTestRoom ===
-                        true
+                        room.isTestRoom
                     ) {
 
                         const testGame =
@@ -2548,19 +3319,20 @@ io.on(
                         );
 
 
-                        const privateInfo =
+                        const info =
                             getPrivatePlayerInfo(
                                 room.currentGame,
                                 socket.id
                             );
 
 
-                        if (privateInfo) {
+                        if (info) {
 
                             socket.emit(
                                 "private_role",
-                                privateInfo
+                                info
                             );
+
                         }
 
                     } else {
@@ -2579,6 +3351,7 @@ io.on(
                         sendPrivateRoles(
                             room
                         );
+
                     }
 
                 } catch (error) {
@@ -2602,7 +3375,7 @@ io.on(
 
         /*
          * ==================================================
-         * 结束当前游戏
+         * 结束游戏 / 开始 CT+T 独立投票
          * ==================================================
          */
 
@@ -2626,6 +3399,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2640,6 +3414,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2650,17 +3425,17 @@ io.on(
 
                         socket.emit(
                             "error_message",
-                            "当前不能结束游戏"
+                            "当前不是游戏进行阶段"
                         );
 
                         return;
+
                     }
 
 
                     /*
-                     * 分组模式：
-                     * 没有身份胜负，
-                     * 直接揭晓分组。
+                     * TEAM 模式没有身份胜负，
+                     * 直接揭晓。
                      */
 
                     if (
@@ -2704,25 +3479,84 @@ io.on(
 
 
                         return;
+
                     }
 
 
                     /*
-                     * 内鬼模式：
-                     * 开始第一轮投票。
+                     * ==================================================
+                     * 初始化双阵营投票
+                     * ==================================================
                      */
 
-                    const candidateIds =
-                        room.players.map(
+                    room.state =
+                        "VOTING";
+
+
+                    room.currentGame.state =
+                        "VOTING";
+
+
+                    room.currentGame.voting = {
+
+                        teams: {},
+
+                        result:
+                            null
+
+                    };
+
+
+                    /*
+                     * CT 第一轮
+                     */
+
+                    startTeamVotingRound(
+                        room,
+                        "CT",
+                        getTeamPlayers(
+                            room,
+                            "CT"
+                        ).map(
                             player =>
                                 player.id
-                        );
-
-
-                    startVotingRound(
-                        room,
-                        candidateIds,
+                        ),
                         false
+                    );
+
+
+                    /*
+                     * T 第一轮
+                     */
+
+                    startTeamVotingRound(
+                        room,
+                        "T",
+                        getTeamPlayers(
+                            room,
+                            "T"
+                        ).map(
+                            player =>
+                                player.id
+                        ),
+                        false
+                    );
+
+
+                    /*
+                     * 给真人发送各自阵营的投票页
+                     */
+
+                    broadcastVotingState(
+                        room
+                    );
+
+
+                    io.to(
+                        room.code
+                    ).emit(
+                        "room_update",
+                        getClientRoom(room)
                     );
 
                 } catch (error) {
@@ -2746,7 +3580,7 @@ io.on(
 
         /*
          * ==================================================
-         * 玩家投票
+         * 投票
          * ==================================================
          */
 
@@ -2770,6 +3604,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2784,30 +3619,68 @@ io.on(
                         );
 
                         return;
+
+                    }
+
+
+                    const player =
+                        findRoomPlayerBySocket(
+                            room,
+                            socket.id
+                        );
+
+
+                    if (!player) {
+
+                        socket.emit(
+                            "vote_error",
+                            "你不在当前房间"
+                        );
+
+                        return;
+
+                    }
+
+
+                    const team =
+                        player.team;
+
+
+                    const voting =
+                        getTeamVoting(
+                            room,
+                            team
+                        );
+
+
+                    if (!voting) {
+
+                        socket.emit(
+                            "vote_error",
+                            "你所在阵营的投票不存在"
+                        );
+
+                        return;
+
                     }
 
 
                     if (
-                        !room.currentGame ||
-                        !room.currentGame.voting
+                        voting.finished
                     ) {
 
                         socket.emit(
                             "vote_error",
-                            "投票数据不存在"
+                            "你所在阵营已经完成投票"
                         );
 
                         return;
+
                     }
 
 
-                    const voting =
-                        room.currentGame.voting;
-
-
                     if (
-                        voting.processingTie ===
-                        true
+                        voting.processingTie
                     ) {
 
                         socket.emit(
@@ -2816,6 +3689,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2832,21 +3706,25 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
                     /*
-                     * 检查本人是否有投票资格
+                     * 当前玩家是否有投票资格
                      */
 
                     const eligibleVoters =
-                        getEligibleVoters(room);
+                        getEligibleVoters(
+                            room,
+                            team
+                        );
 
 
                     if (
                         !eligibleVoters.some(
-                            player =>
-                                player.id ===
+                            voter =>
+                                voter.id ===
                                 socket.id
                         )
                     ) {
@@ -2857,6 +3735,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2867,7 +3746,7 @@ io.on(
                     if (
                         Object.prototype.hasOwnProperty.call(
                             voting.votes,
-                            socket.id
+                            player.name
                         )
                     ) {
 
@@ -2877,6 +3756,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -2895,18 +3775,18 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
                     /*
-                     * 检查目标
+                     * 目标必须属于同阵营
                      */
 
                     const targetPlayer =
-                        room.currentGame.players.find(
-                            player =>
-                                player.id ===
-                                targetId
+                        findGamePlayer(
+                            room,
+                            targetId
                         );
 
 
@@ -2918,6 +3798,22 @@ io.on(
                         );
 
                         return;
+
+                    }
+
+
+                    if (
+                        targetPlayer.team !==
+                        team
+                    ) {
+
+                        socket.emit(
+                            "vote_error",
+                            "只能投自己阵营的玩家"
+                        );
+
+                        return;
+
                     }
 
 
@@ -2935,19 +3831,20 @@ io.on(
 
                         socket.emit(
                             "vote_error",
-                            "重投只能选择上一轮平票候选人"
+                            "平票重投只能选择上一轮并列最高票玩家"
                         );
 
                         return;
+
                     }
 
 
                     /*
-                     * 写入投票
+                     * 写入
                      */
 
                     voting.votes[
-                        socket.id
+                        player.name
                     ] =
                         targetId;
 
@@ -2955,21 +3852,27 @@ io.on(
                     socket.emit(
                         "vote_submitted",
                         {
+
+                            team:
+                                team,
+
                             targetId:
                                 targetId
+
                         }
                     );
 
 
                     /*
-                     * 检查是否结束
+                     * 异步计票
                      */
 
                     setTimeout(
                         () => {
 
-                            processVoting(
-                                room
+                            processTeamVoting(
+                                room,
+                                team
                             );
 
                         },
@@ -3021,6 +3924,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -3035,6 +3939,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -3049,6 +3954,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -3069,6 +3975,7 @@ io.on(
                         );
 
                         return;
+
                     }
 
 
@@ -3089,8 +3996,7 @@ io.on(
 
 
                     if (
-                        room.isTestRoom ===
-                        true
+                        room.isTestRoom
                     ) {
 
                         const testGame =
@@ -3110,19 +4016,20 @@ io.on(
                         );
 
 
-                        const privateInfo =
+                        const info =
                             getPrivatePlayerInfo(
                                 room.currentGame,
                                 socket.id
                             );
 
 
-                        if (privateInfo) {
+                        if (info) {
 
                             socket.emit(
                                 "private_role",
-                                privateInfo
+                                info
                             );
+
                         }
 
                     } else {
@@ -3141,6 +4048,7 @@ io.on(
                         sendPrivateRoles(
                             room
                         );
+
                     }
 
 
@@ -3172,7 +4080,7 @@ io.on(
 
         /*
          * ==================================================
-         * 主动退出房间
+         * 主动退出
          * ==================================================
          */
 
@@ -3198,6 +4106,7 @@ io.on(
 
                     callback =
                         data;
+
                 }
 
 
@@ -3209,9 +4118,7 @@ io.on(
 
                     if (!roomCode) {
 
-                        if (
-                            callback
-                        ) {
+                        if (callback) {
 
                             callback({
                                 success:
@@ -3221,6 +4128,7 @@ io.on(
                         }
 
                         return;
+
                     }
 
 
@@ -3239,9 +4147,7 @@ io.on(
                             null;
 
 
-                        if (
-                            callback
-                        ) {
+                        if (callback) {
 
                             callback({
                                 success:
@@ -3251,14 +4157,14 @@ io.on(
                         }
 
                         return;
+
                     }
 
 
                     const player =
-                        room.players.find(
-                            item =>
-                                item.id ===
-                                socket.id
+                        findRoomPlayerBySocket(
+                            room,
+                            socket.id
                         );
 
 
@@ -3271,9 +4177,7 @@ io.on(
                             null;
 
 
-                        if (
-                            callback
-                        ) {
+                        if (callback) {
 
                             callback({
                                 success:
@@ -3283,20 +4187,21 @@ io.on(
                         }
 
                         return;
+
                     }
 
 
-                    const wasHost =
+                    const isHost =
                         room.hostId ===
                         socket.id;
 
 
                     /*
                      * 房主退出：
-                     * 整个房间关闭。
+                     * 关闭整个房间。
                      */
 
-                    if (wasHost) {
+                    if (isHost) {
 
                         console.log(
                             `房主退出，关闭房间: ${roomCode}`
@@ -3364,9 +4269,7 @@ io.on(
                             null;
 
 
-                        if (
-                            callback
-                        ) {
+                        if (callback) {
 
                             callback({
                                 success:
@@ -3377,12 +4280,12 @@ io.on(
 
 
                         return;
+
                     }
 
 
                     /*
-                     * 普通玩家退出：
-                     * 保存起来以后可以重新加入。
+                     * 普通玩家退出
                      */
 
                     ensureRoomData(room);
@@ -3408,81 +4311,10 @@ io.on(
                     });
 
 
-                    /*
-                     * 如果正在投票，
-                     * 删除这名玩家的投票。
-                     */
-
-                    if (
-                        room.currentGame &&
-                        room.currentGame.voting
-                    ) {
-
-                        const voting =
-                            room.currentGame.voting;
-
-
-                        delete voting.votes[
-                            socket.id
-                        ];
-
-
-                        /*
-                         * 删除他的候选资格
-                         */
-
-                        voting.candidates =
-                            voting.candidates.filter(
-                                id =>
-                                    id !==
-                                    socket.id
-                            );
-
-
-                        /*
-                         * 删除别人投给他的票
-                         */
-
-                        Object.keys(
-                            voting.votes
-                        ).forEach(
-                            voterId => {
-
-                                if (
-                                    voting.votes[
-                                        voterId
-                                    ] ===
-                                    socket.id
-                                ) {
-
-                                    delete voting.votes[
-                                        voterId
-                                    ];
-
-                                }
-
-                            }
-                        );
-
-                    }
-
-
-                    /*
-                     * 当前游戏也删除
-                     */
-
-                    if (
-                        room.currentGame
-                    ) {
-
-                        room.currentGame.players =
-                            room.currentGame.players.filter(
-                                gamePlayer =>
-                                    gamePlayer.name !==
-                                    player.name
-                            );
-
-                    }
+                    removePlayerFromCurrentGame(
+                        room,
+                        player
+                    );
 
 
                     removePlayer(
@@ -3512,8 +4344,7 @@ io.on(
 
 
                     /*
-                     * 如果正在投票，
-                     * 重新计算一次。
+                     * 退出可能改变投票人数
                      */
 
                     if (
@@ -3524,8 +4355,15 @@ io.on(
                         setTimeout(
                             () => {
 
-                                processVoting(
-                                    room
+                                processTeamVoting(
+                                    room,
+                                    "CT"
+                                );
+
+
+                                processTeamVoting(
+                                    room,
+                                    "T"
                                 );
 
                             },
@@ -3535,9 +4373,7 @@ io.on(
                     }
 
 
-                    if (
-                        callback
-                    ) {
+                    if (callback) {
 
                         callback({
                             success:
@@ -3554,16 +4390,16 @@ io.on(
                     );
 
 
-                    if (
-                        callback
-                    ) {
+                    if (callback) {
 
                         callback({
+
                             success:
                                 false,
 
                             message:
                                 "退出房间失败"
+
                         });
 
                     }
@@ -3576,13 +4412,10 @@ io.on(
 
         /*
          * ==================================================
-         * 掉线
+         * 断开连接
          * ==================================================
          *
          * 不删除玩家。
-         *
-         * 如果正在投票，
-         * 掉线的人不再阻塞投票。
          */
 
         socket.on(
@@ -3603,29 +4436,45 @@ io.on(
 
 
                 if (
-                    !room
-                ) {
-                    return;
-                }
-
-
-                if (
-                    room.state ===
+                    !room ||
+                    room.state !==
                     "VOTING"
                 ) {
 
-                    setTimeout(
-                        () => {
-
-                            processVoting(
-                                room
-                            );
-
-                        },
-                        0
-                    );
+                    return;
 
                 }
+
+
+                const player =
+                    findRoomPlayerBySocket(
+                        room,
+                        socket.id
+                    );
+
+
+                if (!player) {
+
+                    return;
+
+                }
+
+
+                /*
+                 * 掉线的人不再阻塞自己阵营的投票。
+                 */
+
+                setTimeout(
+                    () => {
+
+                        processTeamVoting(
+                            room,
+                            player.team
+                        );
+
+                    },
+                    0
+                );
 
             }
         );
@@ -3636,7 +4485,7 @@ io.on(
 
 /*
  * ======================================================
- * 启动服务器
+ * 启动
  * ======================================================
  */
 
